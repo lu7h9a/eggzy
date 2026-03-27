@@ -4,6 +4,7 @@ import { LOCAL_TOPIC_LIBRARY } from "./topicLibrary.js";
 
 const DEFAULT_TOPICS = LOCAL_TOPIC_LIBRARY;
 const BUILT_IN_TOPIC_COUNT = DEFAULT_TOPICS.length;
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 const LEVELS = [
   { id: "child", label: "Elementary", sublabel: "Ages 6-10", accent: "var(--sun)", description: "Simple language, vivid analogies" },
@@ -51,7 +52,7 @@ export default function App() {
 
   async function loadTopics() {
     try {
-      const res = await fetch("/api/topics");
+      const res = await fetch(`${API_BASE_URL}/api/topics`);
       if (!res.ok) throw new Error("Topic API unavailable");
       const data = await res.json();
       setTopics(data.topics?.length ? data.topics : DEFAULT_TOPICS);
@@ -69,7 +70,7 @@ export default function App() {
     const matchedTopic = topics.find((topic) => topic.title.toLowerCase() === concept.trim().toLowerCase());
 
     try {
-      const res = await fetch("/api/explain", {
+      const res = await fetch(`${API_BASE_URL}/api/explain`,  {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -118,7 +119,7 @@ export default function App() {
     if (!sessionId) return;
     setFeedbackLoading(true);
     try {
-      const res = await fetch("/api/feedback", {
+      const res = await fetch(`${API_BASE_URL}/api/feedback`,  {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, understood, learnerExplanation, confusionArea }),
@@ -539,6 +540,8 @@ const styles = `
 @media (max-width:960px){.hero-panel,.lesson-hero{flex-direction:column}.mission-strip,.level-grid,.grid.two-up,.lesson-stage-grid{grid-template-columns:1fr}.hero-mascot-card{min-width:0}}
 @media (max-width:720px){.page-frame{width:min(100% - 20px,1180px)}.topbar{flex-direction:column;align-items:flex-start}.brand-title{font-size:28px}.hero-copy h1{font-size:42px}.cta-button{width:100%}.input-shell{flex-direction:column}}
 `;
+
+
 
 
 
