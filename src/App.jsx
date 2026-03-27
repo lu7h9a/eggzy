@@ -1,23 +1,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { LOCAL_TOPIC_LIBRARY } from "./topicLibrary.js";
 
-const DEFAULT_TOPICS = [
-  { slug: "api", title: "API", category: "Software", shortSummary: "How software systems communicate through structured requests and responses." },
-  { slug: "black-holes", title: "Black Holes", category: "Physics", shortSummary: "Extreme regions of space where gravity is strong enough that light cannot escape." },
-  { slug: "blockchain", title: "Blockchain", category: "Technology", shortSummary: "A shared tamper-resistant record built from linked blocks of data." },
-  { slug: "climate-change", title: "Climate Change", category: "Environment", shortSummary: "Long-term climate shifts driven largely by greenhouse gas emissions." },
-  { slug: "compound-interest", title: "Compound Interest", category: "Finance", shortSummary: "Growth that happens when earnings start earning more earnings." },
-  { slug: "cybersecurity-basics", title: "Cybersecurity Basics", category: "Security", shortSummary: "Protecting systems, accounts, and data from attacks and misuse." },
-  { slug: "data-structures", title: "Data Structures", category: "Computer Science", shortSummary: "Ways to organize data so programs can access and update it efficiently." },
-  { slug: "dna-replication", title: "DNA Replication", category: "Biology", shortSummary: "How cells copy DNA before dividing." },
-  { slug: "electric-circuits", title: "Electric Circuits", category: "Physics", shortSummary: "Closed paths that allow electric current to flow through components." },
-  { slug: "machine-learning", title: "Machine Learning", category: "AI", shortSummary: "Systems that learn patterns from data instead of following only fixed rules." },
-  { slug: "natural-selection", title: "Natural Selection", category: "Biology", shortSummary: "How helpful inherited traits become more common across generations." },
-  { slug: "neural-networks", title: "Neural Networks", category: "AI", shortSummary: "Layered models that learn weighted patterns from data." },
-  { slug: "photosynthesis", title: "Photosynthesis", category: "Biology", shortSummary: "How plants turn sunlight, water, and carbon dioxide into food." },
-  { slug: "recursion", title: "Recursion", category: "Computer Science", shortSummary: "Solving a problem by reducing it into smaller versions of itself." },
-  { slug: "supply-and-demand", title: "Supply and Demand", category: "Economics", shortSummary: "How availability and desire influence prices and quantities." },
-];
+const DEFAULT_TOPICS = LOCAL_TOPIC_LIBRARY;
+const BUILT_IN_TOPIC_COUNT = DEFAULT_TOPICS.length;
 
 const LEVELS = [
   { id: "child", label: "Elementary", sublabel: "Ages 6-10", accent: "var(--sun)", description: "Simple language, vivid analogies" },
@@ -121,7 +107,7 @@ export default function App() {
       setLesson(fallbackLesson);
       setLearnerExplanation("");
       setConfusionArea("");
-      setError("Live API unavailable, showing Eggzy demo mode.");
+      setError("Live API unavailable, so Eggzy switched to the built-in knowledge library.");
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
     } finally {
       setLoading(false);
@@ -173,7 +159,7 @@ export default function App() {
           <div className="hero-copy">
             <div className="pill-row">
               <span className="pill">Eggzy Mode</span>
-              <span className="pill pill-green">15 topic starter pack</span>
+              <span className="pill pill-green">{BUILT_IN_TOPIC_COUNT} topic library</span>
               <span className="pill pill-blue">Dark-mode ready</span>
             </div>
             <h1>Meet Eggzy, the chalkboard buddy that makes tough ideas feel hand-taught.</h1>
@@ -183,7 +169,7 @@ export default function App() {
             <div className="hero-stats">
               <StatCard value="3" label="Explanation levels" />
               <StatCard value="5" label="Lesson stages" />
-              <StatCard value="15" label="Built-in topics" />
+              <StatCard value={String(BUILT_IN_TOPIC_COUNT)} label="Built-in topics" />
             </div>
           </div>
           <div className="hero-mascot-card">
@@ -406,41 +392,55 @@ function createLocalLesson({ topic, learnerLevel, mood, preferredStyle, interest
   const styleLens = getStyleLens(preferredStyle);
   const levelGuide = getLevelGuide(learnerLevel);
   const title = topic.title;
-  const summary = topic.shortSummary || `${title} is easier to learn when you move from purpose to process to example.`;
+  const foundation = topic.foundation || `${title} starts making sense once we define what it is, why it matters, and what problem it solves.`;
+  const coreIdea = topic.coreIdea || `${title} is best understood by focusing on its main purpose, the key parts involved, and the outcome it creates.`;
+  const howItWorks = topic.howItWorks || `Break ${title} into a simple sequence: inputs, transformation, output, and what changes at each step.`;
+  const realWorldExample = topic.realWorldExample || `Imagine using ${title} in a practical real-life scenario where its result becomes easy to observe.`;
+  const summary = topic.summary || topic.shortSummary || `${title} becomes easier when you connect the big idea, the process, and one concrete example.`;
+  const shortSummary = topic.shortSummary || summary;
+  const childAnalogy = topic.childAnalogy || `Think of ${title} like a helpful tool with one big job.`;
+  const beginnerAnalogy = topic.beginnerAnalogy || `${title} becomes easier if you tie it to ${interest || "everyday life"}.`;
+  const expertNuance = topic.expertNuance || `A solid explanation of ${title} should identify the mechanism, system boundaries, assumptions, and possible limitations.`;
+  const confusionHotspots = topic.commonConfusions?.length ? topic.commonConfusions : ["Jumping to the result before understanding the process", "Using a label without defining what it means", "Remembering the example but not the mechanism"];
+  const reversePrompt = topic.reversePrompt || `Teach ${title} back as if you were helping a classmate.`;
+
   return {
     topic: {
-      slug: topic.slug || null, title, category: topic.category || "Custom", shortSummary: summary,
-      foundation: `${title} starts making sense once we define what it is, why it matters, and what problem it solves.`,
-      coreIdea: `${title} is best understood by focusing on its main purpose, the key parts involved, and the outcome it creates.`,
-      howItWorks: `Break ${title} into a simple sequence: inputs, transformation, output, and what changes at each step.`,
-      realWorldExample: `Imagine using ${title} in a practical real-life scenario where its result becomes easy to observe.`,
-      summary: `${title} becomes easier when you connect the big idea, the process, and one concrete example.`,
+      slug: topic.slug || null,
+      title,
+      category: topic.category || "Custom",
+      shortSummary,
+      foundation,
+      coreIdea,
+      howItWorks,
+      realWorldExample,
+      summary,
     },
     learnerSnapshot: { level: learnerLevel, mood, preferredStyle, interest, language, confusionPattern, previousBehavior },
     stages: [
-      { id: "foundation", title: "Foundation", body: `${levelGuide.foundationLead} ${title} matters because it helps explain or solve something important.` },
-      { id: "core", title: "Core Idea", body: `${styleLens.coreFraming} ${title} has a core purpose and a set of parts that work together toward a result.` },
-      { id: "how", title: "How It Works", body: `${levelGuide.processHint} First identify the starting point, then follow the steps, then look at the final effect.` },
-      { id: "example", title: "Real-World Example", body: `${styleLens.exampleLead} ${summary}` },
-      { id: "summary", title: "Summary", body: `${tone.memoryCue} ${title} is easiest to remember as purpose + process + example.` },
+      { id: "foundation", title: "Foundation", body: `${levelGuide.foundationLead} ${foundation}` },
+      { id: "core", title: "Core Idea", body: `${styleLens.coreFraming} ${coreIdea}` },
+      { id: "how", title: "How It Works", body: `${levelGuide.processHint} ${howItWorks}` },
+      { id: "example", title: "Real-World Example", body: `${styleLens.exampleLead} ${realWorldExample}` },
+      { id: "summary", title: "Summary", body: `${tone.memoryCue} ${summary}` },
     ],
     learningModes: {
-      analogy: `${styleLens.beginnerLead} ${title} becomes easier if you imagine it through ${interest || "everyday life"}.`,
-      stepByStep: `${levelGuide.processHint} Start with the foundation, then identify the moving parts, then connect them in sequence.`,
-      realLife: `${styleLens.exampleLead} Think about ${title} in a real-world scenario tied to ${interest || "daily life"}.`,
+      analogy: `${styleLens.beginnerLead} ${beginnerAnalogy}`,
+      stepByStep: `${levelGuide.processHint} ${howItWorks}`,
+      realLife: `${styleLens.exampleLead} ${realWorldExample}`,
     },
     levelExplanations: {
-      child: `${tone.encouragement} Think of ${title} like a helpful tool with one big job. First we learn what it does, then we see the steps, then we try a simple example.`,
-      beginner: `${styleLens.beginnerLead} ${title} makes more sense when you define the key idea clearly, follow the steps in order, and connect it to a real use case.`,
-      expert: `${levelGuide.expertLead} A solid explanation of ${title} should identify the mechanism, system boundaries, assumptions, and possible limitations.`,
+      child: `${tone.encouragement} ${childAnalogy} ${foundation}`,
+      beginner: `${styleLens.beginnerLead} ${coreIdea} ${beginnerAnalogy}`,
+      expert: `${levelGuide.expertLead} ${coreIdea} ${expertNuance}`,
     },
     adaptiveTips: [
       tone.studyTip,
       styleLens.studyAdvice,
       confusionPattern ? `Watch for this confusion pattern: ${confusionPattern}. Slow down when you reach that point.` : "Pause after each stage and restate it in one sentence before moving on.",
     ],
-    confusionHotspots: ["Jumping to the result before understanding the process", "Using a label without defining what it means", "Remembering the example but not the mechanism"],
-    checkInQuestions: [`In one sentence, what is the main job of ${title}?`, "Which part still feels unclear: the idea, the process, or the example?", `Teach ${title} back as if you were helping a classmate.`],
+    confusionHotspots,
+    checkInQuestions: [`In one sentence, what is the main job of ${title}?`, "Which part still feels unclear: the idea, the process, or the example?", reversePrompt],
   };
 }
 
@@ -539,3 +539,6 @@ const styles = `
 @media (max-width:960px){.hero-panel,.lesson-hero{flex-direction:column}.mission-strip,.level-grid,.grid.two-up,.lesson-stage-grid{grid-template-columns:1fr}.hero-mascot-card{min-width:0}}
 @media (max-width:720px){.page-frame{width:min(100% - 20px,1180px)}.topbar{flex-direction:column;align-items:flex-start}.brand-title{font-size:28px}.hero-copy h1{font-size:42px}.cta-button{width:100%}.input-shell{flex-direction:column}}
 `;
+
+
+

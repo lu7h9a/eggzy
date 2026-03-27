@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { seedTopics } from "./seedData.js";
 
 const defaultDbPath = path.resolve("server", "data", "learn-your-way.db");
@@ -9,8 +9,8 @@ export function createDatabase(dbPath = process.env.DB_PATH || defaultDbPath) {
   const resolvedPath = path.resolve(dbPath);
   fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
 
-  const db = new Database(resolvedPath);
-  db.pragma("journal_mode = WAL");
+  const db = new DatabaseSync(resolvedPath);
+  db.exec("PRAGMA journal_mode = WAL;");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS topics (
@@ -76,8 +76,8 @@ export function createDatabase(dbPath = process.env.DB_PATH || defaultDbPath) {
 }
 
 function seedDatabase(db) {
-  const count = db.prepare("SELECT COUNT(*) AS count FROM topics").get().count;
-  if (count > 0) {
+  const countRow = db.prepare("SELECT COUNT(*) AS count FROM topics").get();
+  if (countRow?.count > 0) {
     return;
   }
 
@@ -93,17 +93,13 @@ function seedDatabase(db) {
     )
   `);
 
-  const insertMany = db.transaction((topics) => {
-    for (const topic of topics) {
-      insertTopic.run({
-        ...topic,
-        commonConfusions: JSON.stringify(topic.commonConfusions),
-        keywords: JSON.stringify(topic.keywords),
-      });
-    }
-  });
-
-  insertMany(seedTopics);
+  for (const topic of seedTopics) {
+    insertTopic.run({
+      ...topic,
+      commonConfusions: JSON.stringify(topic.commonConfusions),
+      keywords: JSON.stringify(topic.keywords),
+    });
+  }
 }
 
 export function listTopics(db) {

@@ -64,7 +64,7 @@ Instead of giving one generic answer, Eggzy teaches in layers and checks whether
 ## Tech Stack
 
 - Frontend: React, JSX, Vite, CSS-in-JS styling
-- Backend: Node.js, Express, CORS, dotenv, Gemini API (env-based integration)
+- Backend: Node.js, Express, CORS, dotenv, Groq API or Gemini API (env-based integration)
 - Database: SQLite using Node's built-in `node:sqlite`
 - Build and tooling: Vite, `@vitejs/plugin-react`, concurrently
 - Deployment: Netlify
@@ -83,7 +83,7 @@ Instead of giving one generic answer, Eggzy teaches in layers and checks whether
 ## Run locally
 
 1. Install Node.js 18+
-2. Copy `.env.example` to `.env` and add your Gemini API key if you want live AI lessons
+2. Copy `.env.example` to `.env` and add your Groq or Gemini API key if you want live AI lessons
 3. Install dependencies
 4. Start the project
 
@@ -104,5 +104,6 @@ Note:
 ## One-line pitch
 
 Eggzy is an AI teacher that adapts explanations, detects confusion, and makes sure the learner understands, not just receives an answer.
+
 
 

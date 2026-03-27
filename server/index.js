@@ -9,12 +9,14 @@ const port = Number(process.env.PORT || 4000);
 const db = createDatabase();
 const geminiApiKey = process.env.GEMINI_API_KEY || "";
 const geminiModel = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+const groqApiKey = process.env.GROQ_API_KEY || "";
+const groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 app.use(cors());
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, seededTopics: listTopics(db).length, aiProvider: geminiApiKey ? "gemini" : "local" });
+  res.json({ ok: true, seededTopics: listTopics(db).length, aiProvider: getAiProvider() });
 });
 
 app.get("/api/topics", (_req, res) => {
@@ -153,6 +155,14 @@ function upsertLearnerProfile(
 }
 
 async function createLesson({ topic, customTopic, learner }) {
+  if (groqApiKey) {
+    try {
+      return await generateLessonWithGroq({ topic, customTopic, learner });
+    } catch (error) {
+      console.error("Groq generation failed, falling back:", error);
+    }
+  }
+
   if (geminiApiKey) {
     try {
       return await generateLessonWithGemini({ topic, customTopic, learner });
@@ -164,13 +174,63 @@ async function createLesson({ topic, customTopic, learner }) {
   return topic ? buildAdaptiveLesson(topic, learner) : buildCustomLesson(customTopic, learner);
 }
 
-async function generateLessonWithGemini({ topic, customTopic, learner }) {
+function getAiProvider() {
+  if (groqApiKey) {
+    return "groq";
+  }
+
+  if (geminiApiKey) {
+    return "gemini";
+  }
+
+  return "local";
+}
+
+async function generateLessonWithGroq({ topic, customTopic, learner }) {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${groqApiKey}`,
+    },
+    body: JSON.stringify({
+      model: groqModel,
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: "You are Eggzy, an adaptive AI teacher. Always return valid JSON only.",
+        },
+        {
+          role: "user",
+          content: buildLessonPrompt({ topic, customTopic, learner }),
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Groq API error ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  const text = data?.choices?.[0]?.message?.content?.trim();
+  if (!text) {
+    throw new Error("Groq returned no content.");
+  }
+
+  return normalizeLesson(JSON.parse(text), { topic, customTopic, learner });
+}
+
+function buildLessonPrompt({ topic, customTopic, learner }) {
   const subject = topic?.title || customTopic;
   const moodTone = getMoodTone(learner.mood);
   const styleLens = getStyleLens(learner.preferredStyle);
   const levelGuide = getLevelGuide(learner.learnerLevel);
 
-  const prompt = `
+  return `
 You are Eggzy, an adaptive AI teacher. Return only valid JSON.
 
 Create a personalized lesson for "${subject}".
@@ -242,7 +302,8 @@ Additional teaching context:
 - style lens: ${styleLens.coreFraming}
 - level guide: ${levelGuide.foundationLead}
 `.trim();
-
+}
+async function generateLessonWithGemini({ topic, customTopic, learner }) {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`,
     {
@@ -591,4 +652,8 @@ function tokenize(text) {
     .split(/\s+/)
     .filter((token) => token.length > 2);
 }
+
+
+
+
 
