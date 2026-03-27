@@ -1,5 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+const DEFAULT_TOPICS = [
+  { slug: "api", title: "API", category: "Software", shortSummary: "How software systems communicate through structured requests and responses." },
+  { slug: "black-holes", title: "Black Holes", category: "Physics", shortSummary: "Extreme regions of space where gravity is strong enough that light cannot escape." },
+  { slug: "blockchain", title: "Blockchain", category: "Technology", shortSummary: "A shared tamper-resistant record built from linked blocks of data." },
+  { slug: "climate-change", title: "Climate Change", category: "Environment", shortSummary: "Long-term climate shifts driven largely by greenhouse gas emissions." },
+  { slug: "compound-interest", title: "Compound Interest", category: "Finance", shortSummary: "Growth that happens when earnings start earning more earnings." },
+  { slug: "cybersecurity-basics", title: "Cybersecurity Basics", category: "Security", shortSummary: "Protecting systems, accounts, and data from attacks and misuse." },
+  { slug: "data-structures", title: "Data Structures", category: "Computer Science", shortSummary: "Ways to organize data so programs can access and update it efficiently." },
+  { slug: "dna-replication", title: "DNA Replication", category: "Biology", shortSummary: "How cells copy DNA before dividing." },
+  { slug: "electric-circuits", title: "Electric Circuits", category: "Physics", shortSummary: "Closed paths that allow electric current to flow through components." },
+  { slug: "machine-learning", title: "Machine Learning", category: "AI", shortSummary: "Systems that learn patterns from data instead of following only fixed rules." },
+  { slug: "natural-selection", title: "Natural Selection", category: "Biology", shortSummary: "How helpful inherited traits become more common across generations." },
+  { slug: "neural-networks", title: "Neural Networks", category: "AI", shortSummary: "Layered models that learn weighted patterns from data." },
+  { slug: "photosynthesis", title: "Photosynthesis", category: "Biology", shortSummary: "How plants turn sunlight, water, and carbon dioxide into food." },
+  { slug: "recursion", title: "Recursion", category: "Computer Science", shortSummary: "Solving a problem by reducing it into smaller versions of itself." },
+  { slug: "supply-and-demand", title: "Supply and Demand", category: "Economics", shortSummary: "How availability and desire influence prices and quantities." },
+];
+
 const LEVELS = [
   { id: "child", label: "Elementary", sublabel: "Ages 6-10", accent: "#B5935A", description: "Simple language, vivid analogies" },
   { id: "beginner", label: "Foundational", sublabel: "No prior knowledge", accent: "#3D7A6B", description: "Structured, jargon-free clarity" },
@@ -11,7 +29,7 @@ const STYLES = ["analogy", "story", "technical", "simple"];
 
 export default function App() {
   const [concept, setConcept] = useState("");
-  const [topics, setTopics] = useState([]);
+  const [topics, setTopics] = useState(DEFAULT_TOPICS);
   const [activeLevel, setActiveLevel] = useState("beginner");
   const [learnerName, setLearnerName] = useState("");
   const [mood, setMood] = useState("focused");
@@ -38,10 +56,13 @@ export default function App() {
   async function loadTopics() {
     try {
       const res = await fetch("/api/topics");
+      if (!res.ok) {
+        throw new Error("Topic API unavailable");
+      }
       const data = await res.json();
-      setTopics(data.topics || []);
+      setTopics(data.topics?.length ? data.topics : DEFAULT_TOPICS);
     } catch {
-      setError("Unable to load the predefined learning topics.");
+      setTopics(DEFAULT_TOPICS);
     }
   }
 
@@ -79,7 +100,20 @@ export default function App() {
       setConfusionArea("");
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
     } catch (err) {
-      setError(err.message || "Something went wrong. Please try again.");
+      const fallbackLesson = createLocalLesson({
+        topic: matchedTopic || { title: concept.trim(), category: "Custom", shortSummary: `A guided explanation for ${concept.trim()}.` },
+        learnerLevel: activeLevel,
+        mood,
+        preferredStyle,
+        confusionPattern,
+        previousBehavior,
+      });
+      setSessionId(`local-${Date.now()}`);
+      setLesson(fallbackLesson);
+      setLearnerExplanation("");
+      setConfusionArea("");
+      setError("Live API unavailable, showing local demo mode.");
+      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
     } finally {
       setLoading(false);
     }
@@ -104,8 +138,8 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Unable to save feedback");
       setFeedback(data);
-    } catch (err) {
-      setError(err.message || "Unable to save feedback.");
+    } catch {
+      setFeedback(createLocalFeedback({ understood, learnerExplanation, confusionArea, lesson }));
     } finally {
       setFeedbackLoading(false);
     }
@@ -408,4 +442,193 @@ function toggleButtonStyle(active) {
     color: "#F6F3EE",
     cursor: "pointer",
   };
+}
+function createLocalLesson({
+  topic,
+  learnerLevel,
+  mood,
+  preferredStyle,
+  confusionPattern,
+  previousBehavior,
+}) {
+  const tone = getMoodTone(mood);
+  const styleLens = getStyleLens(preferredStyle);
+  const levelGuide = getLevelGuide(learnerLevel);
+  const title = topic.title;
+  const summary = topic.shortSummary ||     `${title} is easier to learn when you move from purpose to process to example.`;
+
+  return {
+    topic: {
+      slug: topic.slug || null,
+      title,
+      category: topic.category || "Custom",
+      shortSummary: summary,
+      foundation: `${title} starts making sense once we define what it is, why it matters, and what problem it solves.`,
+      coreIdea: `${title} is best understood by focusing on its main purpose, the key parts involved, and the outcome it creates.`,
+      howItWorks: `Break ${title} into a simple sequence: inputs, transformation, output, and what changes at each step.`,
+      realWorldExample: `Imagine using ${title} in a practical real-life scenario where its result becomes easy to observe.`,
+      summary: `${title} becomes easier when you connect the big idea, the process, and one concrete example.`,
+    },
+    learnerSnapshot: {
+      level: learnerLevel,
+      mood,
+      preferredStyle,
+      confusionPattern,
+      previousBehavior,
+    },
+    stages: [
+      { id: "foundation", title: "Foundation", body: `${levelGuide.foundationLead} ${title} matters because it helps explain or solve something important.` },
+      { id: "core", title: "Core Idea", body: `${styleLens.coreFraming} ${title} has a core purpose and a set of parts that work together toward a result.` },
+      { id: "how", title: "How It Works", body: `${levelGuide.processHint} First identify the starting point, then follow the steps, then look at the final effect.` },
+      { id: "example", title: "Real-World Example", body: `${styleLens.exampleLead} ${summary}` },
+      { id: "summary", title: "Summary", body: `${tone.memoryCue} ${title} is easiest to remember as purpose + process + example.` },
+    ],
+    levelExplanations: {
+      child: `${tone.encouragement} Think of ${title} like a helpful tool with one big job. First we learn what it does, then we see the steps, then we try a simple example.`,
+      beginner: `${styleLens.beginnerLead} ${title} makes more sense when you define the key idea clearly, follow the steps in order, and connect it to a real use case.`,
+      expert: `${levelGuide.expertLead} A solid explanation of ${title} should identify the mechanism, system boundaries, assumptions, and possible limitations.`,
+    },
+    adaptiveTips: [
+      tone.studyTip,
+      styleLens.studyAdvice,
+      confusionPattern
+        ? `Watch for this confusion pattern: ${confusionPattern}. Slow down when you reach that point.`
+        : "Pause after each stage and restate it in one sentence before moving on.",
+    ],
+    confusionHotspots: [
+      "Jumping to the result before understanding the process",
+      "Using a label without defining what it means",
+      "Remembering the example but not the mechanism",
+    ],
+    checkInQuestions: [
+      `In one sentence, what is the main job of ${title}?`,
+      "Which part still feels unclear: the idea, the process, or the example?",
+      `Teach ${title} back as if you were helping a classmate.`,
+    ],
+  };
+}
+
+function createLocalFeedback({ understood, learnerExplanation, confusionArea, lesson }) {
+  const overlapScore = scoreExplanation(
+    learnerExplanation,
+    `${lesson?.topic?.summary || ""} ${lesson?.topic?.shortSummary || ""}`
+  );
+
+  if (confusionArea.trim()) {
+    return {
+      overlapScore,
+      nextAction: "reteach",
+      coachingResponse: `Focus on "${confusionArea}" first. Re-read the core idea and explain it again in two short sentences.`,
+    };
+  }
+
+  if (understood && overlapScore >= 0.2) {
+    return {
+      overlapScore,
+      nextAction: "advance",
+      coachingResponse: "Nice work. Your explanation is capturing the main idea. Try comparing the foundation stage to the process stage to deepen your understanding.",
+    };
+  }
+
+  return {
+    overlapScore,
+    nextAction: "reteach",
+    coachingResponse: `Let's simplify it one more step. Start with the purpose of ${lesson?.topic?.title || "the topic"}, then describe only one key step in the process.`,
+  };
+}
+
+function getMoodTone(mood) {
+  const tones = {
+    focused: {
+      encouragement: "You are in a strong place to go deeper.",
+      memoryCue: "Memory cue:",
+      studyTip: "Stay with the exact mechanism instead of only the final answer.",
+    },
+    overwhelmed: {
+      encouragement: "We will keep this gentle and one step at a time.",
+      memoryCue: "Small takeaway:",
+      studyTip: "Read one stage, pause, and paraphrase it before moving on.",
+    },
+    curious: {
+      encouragement: "Let curiosity lead and connect each idea to a question.",
+      memoryCue: "Interesting takeaway:",
+      studyTip: "Ask what would happen if one part of the process changed.",
+    },
+    tired: {
+      encouragement: "We will keep the explanation compact and low-friction.",
+      memoryCue: "Quick takeaway:",
+      studyTip: "Focus on the foundation and summary first, then revisit details.",
+    },
+  };
+  return tones[mood] || tones.focused;
+}
+function getStyleLens(style) {
+  const styles = {
+    analogy: {
+      coreFraming: "Here is the big idea through a mental picture.",
+      exampleLead: "Picture it like this in daily life.",
+      beginnerLead: "Using an analogy-first explanation:",
+      studyAdvice: "If you get stuck, map each analogy part to the real concept.",
+    },
+    story: {
+      coreFraming: "Think of the concept as a sequence with characters and roles.",
+      exampleLead: "Now place it inside a short story-like situation.",
+      beginnerLead: "Using a story-driven explanation:",
+      studyAdvice: "Retell the process as a short story with cause and effect.",
+    },
+    technical: {
+      coreFraming: "We will define the system precisely before simplifying it.",
+      exampleLead: "Now anchor the abstraction in a practical use case.",
+      beginnerLead: "Using a structure-first explanation:",
+      studyAdvice: "List the components, then note what each one does.",
+    },
+    simple: {
+      coreFraming: "Strip away extra detail and keep only the essential idea.",
+      exampleLead: "Use one practical example to lock it in.",
+      beginnerLead: "Using the simplest clear explanation:",
+      studyAdvice: "Turn each stage into one short sentence in your own words.",
+    },
+  };
+  return styles[style] || styles.analogy;
+}
+function getLevelGuide(level) {
+  const levels = {
+    child: {
+      foundationLead: "Start from zero and use familiar words.",
+      processHint: "Walk through the steps slowly and visibly.",
+      expertLead: "Even at a high-detail level, keep the explanation intuitive first.",
+    },
+    beginner: {
+      foundationLead: "Assume no background and define the basic pieces first.",
+      processHint: "Follow the process in a clean step-by-step order.",
+      expertLead: "Add precision while still connecting each detail to the learner's mental model.",
+    },
+    expert: {
+      foundationLead: "Use the foundation to align terminology before adding nuance.",
+      processHint: "Focus on the internal mechanism, dependencies, and edge cases.",
+      expertLead: "Here is the deeper technical framing.",
+    },
+  };
+  return levels[level] || levels.beginner;
+}
+function scoreExplanation(learnerText, referenceText) {
+  const learnerTokens = tokenize(learnerText);
+  const referenceTokens = new Set(tokenize(referenceText));
+  if (!learnerTokens.length) {
+    return 0;
+  }
+  let matches = 0;
+  for (const token of learnerTokens) {
+    if (referenceTokens.has(token)) {
+      matches += 1;
+    }
+  }
+  return Number((matches / learnerTokens.length).toFixed(2));
+}
+function tokenize(text) {
+  return String(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 2);
 }
