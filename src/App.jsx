@@ -113,7 +113,7 @@ export default function App() {
       setLesson(fallbackLesson);
       setLearnerExplanation("");
       setConfusionArea("");
-      setError("Live API unavailable, showing Eggsy demo mode.");
+      setError("Live API unavailable, showing Eggzy demo mode.");
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
     } finally {
       setLoading(false);
@@ -150,9 +150,9 @@ export default function App() {
       <div className="page-frame">
         <header className="topbar">
           <div className="brand-wrap">
-            <div className="brand-chip"><EggsyMascot theme={theme} compact /></div>
+            <div className="brand-chip"><EggzyMascot theme={theme} compact /></div>
             <div>
-              <div className="brand-title">Eggsy</div>
+              <div className="brand-title">Eggzy</div>
               <div className="brand-subtitle">Your cheerful concept coach</div>
             </div>
           </div>
@@ -164,13 +164,13 @@ export default function App() {
         <section className="hero-panel">
           <div className="hero-copy">
             <div className="pill-row">
-              <span className="pill">Eggsy Mode</span>
+              <span className="pill">Eggzy Mode</span>
               <span className="pill pill-green">15 topic starter pack</span>
               <span className="pill pill-blue">Dark-mode ready</span>
             </div>
-            <h1>Meet Eggsy, the tiny tutor that turns confusion into streaks.</h1>
+            <h1>Meet Eggzy, the chalkboard buddy that makes tough ideas feel hand-taught.</h1>
             <p>
-              The experience now leans into a playful, rounded learning style inspired by modern language-learning apps: bold cards, clear progress cues, friendly copy, and a mascot that reacts beautifully in dark mode.
+              The experience now mixes playful learning-app energy with a cozy classroom blackboard vibe: chalky textures, lesson cards that feel pinned to a board, and a mascot that looks unmistakably egg-shaped in both dark and light mode.
             </p>
             <div className="hero-stats">
               <StatCard value="3" label="Explanation levels" />
@@ -180,22 +180,22 @@ export default function App() {
           </div>
           <div className="hero-mascot-card">
             <div className="mascot-badge">Mascot online</div>
-            <EggsyMascot theme={theme} />
+            <EggzyMascot theme={theme} />
             <div className="mascot-caption">
-              <strong>Eggsy adapts with the theme.</strong>
-              <span>Soft shell in light mode, moonlit shell and brighter yolk glow in dark mode.</span>
+              <strong>Eggzy adapts with the theme.</strong>
+              <span>Soft classroom chalk vibes in light mode, deeper blackboard glow and warm yolk contrast in dark mode.</span>
             </div>
           </div>
         </section>
 
         <section className="mission-strip">
-          <div className="mission-card lime"><span className="mission-eyebrow">How it feels</span><strong>Playful, bold, and guided</strong><p>Rounded surfaces, strong contrast, supportive microcopy, and big-action buttons.</p></div>
+          <div className="mission-card lime"><span className="mission-eyebrow">How it feels</span><strong>Playful, chalky, and guided</strong><p>Rounded cards, blackboard contrast, supportive microcopy, and punchy classroom actions.</p></div>
           <div className="mission-card yellow"><span className="mission-eyebrow">How it teaches</span><strong>Step by step, never overwhelming</strong><p>Foundation first, then process, then example, then a teach-back loop.</p></div>
           <div className="mission-card blue"><span className="mission-eyebrow">How it adapts</span><strong>Mood-aware and level-aware</strong><p>The lesson path changes with learner mood, explanation style, and confidence.</p></div>
         </section>
 
         <section className="panel profile-panel">
-          <div className="section-heading"><span className="eyebrow">Learner Setup</span><h2>Tell Eggsy how you learn best</h2></div>
+          <div className="section-heading"><span className="eyebrow">Learner Setup</span><h2>Tell Eggzy how you learn best</h2></div>
           <div className="grid two-up">
             <Field label="Learner name"><input className="input" value={learnerName} onChange={(event) => setLearnerName(event.target.value)} placeholder="Optional" /></Field>
             <Field label="Current mental state"><select className="input" value={mood} onChange={(event) => setMood(event.target.value)}>{MOODS.map((option) => <option key={option} value={option}>{capitalize(option)}</option>)}</select></Field>
@@ -206,7 +206,7 @@ export default function App() {
         </section>
 
         <section className="panel concept-panel">
-          <div className="section-heading"><span className="eyebrow">Choose A Concept</span><h2>Pick a topic and let Eggsy hatch a lesson</h2></div>
+          <div className="section-heading"><span className="eyebrow">Choose A Concept</span><h2>Pick a topic and let Eggzy hatch a lesson</h2></div>
           <div className={`input-shell ${inputFocused ? "focused" : ""}`}>
             <input
               ref={inputRef}
@@ -277,7 +277,7 @@ export default function App() {
             </section>
 
             <section className="panel feedback-panel">
-              <div className="section-heading"><span className="eyebrow">Understanding Check</span><h2>Teach it back to Eggsy</h2></div>
+              <div className="section-heading"><span className="eyebrow">Understanding Check</span><h2>Teach it back to Eggzy</h2></div>
               <div className="grid two-up">
                 <div className="question-box">
                   {lesson.checkInQuestions.map((question) => <div key={question} className="question-row">{question}</div>)}
@@ -292,12 +292,12 @@ export default function App() {
                   <button className="cta-button wide" onClick={() => void handleFeedbackSubmit()} disabled={feedbackLoading}>{feedbackLoading ? "Checking..." : "Evaluate Understanding"}</button>
                 </div>
               </div>
-              {feedback ? <div className="coach-response"><span className="eyebrow">Eggsy says</span><p>{feedback.coachingResponse}</p><small>Concept overlap score: {feedback.overlapScore}</small></div> : null}
+              {feedback ? <div className="coach-response"><span className="eyebrow">Eggzy says</span><p>{feedback.coachingResponse}</p><small>Concept overlap score: {feedback.overlapScore}</small></div> : null}
             </section>
           </div>
         ) : (
           <section className="panel library-panel">
-            <div className="section-heading"><span className="eyebrow">Starter Library</span><h2>Browse Eggsy's ready-made quests</h2></div>
+            <div className="section-heading"><span className="eyebrow">Starter Library</span><h2>Browse Eggzy's ready-made quests</h2></div>
             <div className="grid two-up">
               {topics.slice(0, 8).map((topic) => (
                 <article key={topic.slug} className="library-card"><small>{topic.category}</small><strong>{topic.title}</strong><p>{topic.shortSummary}</p></article>
@@ -310,30 +310,34 @@ export default function App() {
   );
 }
 
-function EggsyMascot({ theme, compact = false }) {
+function EggzyMascot({ theme, compact = false }) {
+  const shellStroke = theme === "dark" ? "#d6e2da" : "#31415c";
+  const shellFill = theme === "dark" ? "#fffef7" : "#fffdfa";
+  const wingFill = theme === "dark" ? "#ffd85a" : "#ffd454";
+
   return (
-    <svg viewBox="0 0 220 220" className={compact ? "eggsy compact" : "eggsy"} aria-label="Eggsy mascot">
+    <svg viewBox="0 0 220 220" className={compact ? "eggzy compact" : "eggzy"} aria-label="Eggzy mascot">
       <defs>
         <linearGradient id={`yolk-${theme}`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor={theme === "dark" ? "#ffd84d" : "#ffd84a"} />
-          <stop offset="100%" stopColor={theme === "dark" ? "#ffb703" : "#ffca3a"} />
+          <stop offset="0%" stopColor={theme === "dark" ? "#ffe27a" : "#ffe069"} />
+          <stop offset="100%" stopColor={theme === "dark" ? "#ffb703" : "#ffc233"} />
         </linearGradient>
       </defs>
-      <ellipse cx="110" cy="198" rx="52" ry="10" fill={theme === "dark" ? "rgba(0,0,0,0.28)" : "rgba(18,26,20,0.12)"} />
-      <path d="M110 20C73 20 48 60 48 111v21c0 39 28 68 62 68s62-29 62-68v-21c0-51-25-91-62-91Z" fill={theme === "dark" ? "#edf2ff" : "#fffaf0"} stroke={theme === "dark" ? "#c7d2fe" : "#32415f"} strokeWidth="8" />
-      <path d="M48 128c14 18 39 30 62 30s48-12 62-30v6c0 39-28 66-62 66s-62-27-62-66Z" fill={`url(#yolk-${theme})`} stroke={theme === "dark" ? "#c7d2fe" : "#32415f"} strokeWidth="8" strokeLinejoin="round" />
-      <path d="M44 136c-16 8-24 18-24 28 0 8 6 13 15 13 10 0 18-5 26-15" fill={theme === "dark" ? "#ffcc33" : "#ffd54f"} stroke={theme === "dark" ? "#c7d2fe" : "#32415f"} strokeWidth="8" strokeLinecap="round" />
-      <path d="M176 136c16 8 24 18 24 28 0 8-6 13-15 13-10 0-18-5-26-15" fill={theme === "dark" ? "#ffcc33" : "#ffd54f"} stroke={theme === "dark" ? "#c7d2fe" : "#32415f"} strokeWidth="8" strokeLinecap="round" />
-      <path d="M80 80c-10-6-19-5-28 2" fill="none" stroke="#32415f" strokeWidth="7" strokeLinecap="round" />
-      <path d="M140 80c10-6 19-5 28 2" fill="none" stroke="#32415f" strokeWidth="7" strokeLinecap="round" />
-      <circle cx="77" cy="112" r="16" fill="#32415f" />
-      <circle cx="143" cy="112" r="16" fill="#32415f" />
-      <circle cx="83" cy="106" r="5" fill="#ffffff" />
-      <circle cx="149" cy="106" r="5" fill="#ffffff" />
-      <path d="M96 136c0 10 8 18 14 18s14-8 14-18c-7 2-12 3-14 3s-7-1-14-3Z" fill="#32415f" />
-      <path d="M99 149c3 5 8 8 11 8s8-3 11-8c-4-2-8-3-11-3s-7 1-11 3Z" fill="#ff7b7b" />
-      <ellipse cx="77" cy="128" rx="8" ry="4" fill={theme === "dark" ? "#475569" : "#4d5d79"} opacity="0.5" />
-      <ellipse cx="143" cy="128" rx="8" ry="4" fill={theme === "dark" ? "#475569" : "#4d5d79"} opacity="0.5" />
+      <ellipse cx="110" cy="198" rx="54" ry="11" fill={theme === "dark" ? "rgba(0,0,0,0.32)" : "rgba(15,28,22,0.14)"} />
+      <path d="M110 18c-30 0-54 20-63 49-5 16-6 35-6 58 0 48 30 82 69 82s69-34 69-82c0-23-1-42-6-58-9-29-33-49-63-49Z" fill={shellFill} stroke={shellStroke} strokeWidth="8" />
+      <path d="M49 133c15 19 37 30 61 30s46-11 61-30v5c0 40-27 68-61 68s-61-28-61-68Z" fill={`url(#yolk-${theme})`} stroke={shellStroke} strokeWidth="8" strokeLinejoin="round" />
+      <path d="M42 136c-15 8-23 18-23 28 0 8 6 13 14 13 10 0 18-5 26-15" fill={wingFill} stroke={shellStroke} strokeWidth="8" strokeLinecap="round" />
+      <path d="M178 136c15 8 23 18 23 28 0 8-6 13-14 13-10 0-18-5-26-15" fill={wingFill} stroke={shellStroke} strokeWidth="8" strokeLinecap="round" />
+      <path d="M79 82c-10-6-18-6-27 1" fill="none" stroke="#34425e" strokeWidth="7" strokeLinecap="round" />
+      <path d="M141 82c10-6 18-6 27 1" fill="none" stroke="#34425e" strokeWidth="7" strokeLinecap="round" />
+      <circle cx="78" cy="114" r="17" fill="#34425e" />
+      <circle cx="142" cy="114" r="17" fill="#34425e" />
+      <circle cx="84" cy="108" r="5" fill="#ffffff" />
+      <circle cx="148" cy="108" r="5" fill="#ffffff" />
+      <path d="M93 139c0 11 8 19 17 19s17-8 17-19c-9 3-14 4-17 4s-8-1-17-4Z" fill="#34425e" />
+      <path d="M98 151c4 5 8 8 12 8s8-3 12-8c-5-2-8-3-12-3s-7 1-12 3Z" fill="#ff7f7f" />
+      <ellipse cx="79" cy="129" rx="8" ry="4" fill="#55637d" opacity="0.45" />
+      <ellipse cx="141" cy="129" rx="8" ry="4" fill="#55637d" opacity="0.45" />
     </svg>
   );
 }
@@ -439,17 +443,17 @@ function tokenize(text) {
 
 const styles = `
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&display=swap');
-:root { --bg:#0e1510; --bg-soft:#16201a; --panel:#18231c; --panel-2:#202d25; --panel-3:#25352a; --text:#f6fff7; --muted:#adc5b3; --line:rgba(255,255,255,0.09); --shadow:0 18px 50px rgba(0,0,0,0.28); --lime:#58cc02; --lime-deep:#46a302; --sun:#ffd84a; --sky:#66a9ff; --danger:#ff6b6b; }
-:root[data-theme="light"] { --bg:#f4f7ee; --bg-soft:#eef5df; --panel:#ffffff; --panel-2:#fbfff6; --panel-3:#f3f8ea; --text:#1d241d; --muted:#6f7d73; --line:rgba(34,44,34,0.09); --shadow:0 18px 50px rgba(60,94,55,0.12); --lime:#58cc02; --lime-deep:#46a302; --sun:#ffca3a; --sky:#4d8ff7; --danger:#f25f5c; }
+:root { --bg:#0b1713; --bg-soft:#11211b; --panel:#14271f; --panel-2:#1a3127; --panel-3:#20392d; --text:#f6fff7; --muted:#b2c7b8; --line:rgba(223,241,228,0.12); --shadow:0 18px 50px rgba(0,0,0,0.30); --lime:#58cc02; --lime-deep:#46a302; --sun:#ffd84a; --sky:#7cb8ff; --danger:#ff6b6b; }
+:root[data-theme="light"] { --bg:#f7f1de; --bg-soft:#efe6cb; --panel:#fffdf5; --panel-2:#faf4e3; --panel-3:#f3ecd8; --text:#1d241d; --muted:#6f7668; --line:rgba(72,61,38,0.10); --shadow:0 18px 50px rgba(96,82,49,0.10); --lime:#58cc02; --lime-deep:#46a302; --sun:#ffca3a; --sky:#4d8ff7; --danger:#f25f5c; }
 *{box-sizing:border-box} body{margin:0;font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text)} button,input,textarea,select{font:inherit}
-.app-shell{min-height:100vh;background:radial-gradient(circle at top left, rgba(88,204,2,0.18), transparent 24%),radial-gradient(circle at 80% 10%, rgba(102,169,255,0.14), transparent 22%),linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);color:var(--text);position:relative;overflow-x:hidden}
+.app-shell{min-height:100vh;background:radial-gradient(circle at top left, rgba(88,204,2,0.10), transparent 24%),radial-gradient(circle at 80% 10%, rgba(255,216,74,0.10), transparent 22%),repeating-linear-gradient(0deg, rgba(255,255,255,0.018) 0, rgba(255,255,255,0.018) 2px, transparent 2px, transparent 44px),linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);color:var(--text);position:relative;overflow-x:hidden}
 .background-orb{position:fixed;border-radius:999px;filter:blur(80px);opacity:.25;pointer-events:none}.orb-one{width:340px;height:340px;background:var(--lime);top:-100px;left:-80px}.orb-two{width:280px;height:280px;background:var(--sun);right:-80px;top:160px}
 .page-frame{width:min(1180px,calc(100% - 32px));margin:0 auto;padding:28px 0 72px;position:relative;z-index:1}.topbar,.hero-panel,.mission-strip,.grid,.level-grid,.tabs,.toggle-row,.hero-stats,.pill-row,.brand-wrap{display:flex;gap:16px}.topbar,.hero-panel,.mission-strip,.toggle-row{align-items:center}.topbar,.hero-panel{justify-content:space-between}.hero-panel,.mission-strip,.lesson-stack{margin-top:22px}.grid,.level-grid,.topic-grid,.bullet-stack{display:grid}
 .brand-chip,.theme-toggle,.panel,.mission-card,.level-card,.topic-chip,.stat-card,.library-card,.stage-card,.bullet-card,.error-banner,.snapshot-card,.explanation-card,.question-box,.coach-response{border:2px solid var(--line);box-shadow:var(--shadow)}
 .brand-chip{width:66px;height:66px;border-radius:22px;background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);display:grid;place-items:center}.brand-title{font-size:34px;font-weight:900;line-height:1}.brand-subtitle{color:var(--muted);font-size:14px}.theme-toggle{border-radius:999px;background:var(--panel);color:var(--text);padding:12px 18px;display:flex;gap:18px;align-items:center;cursor:pointer;font-weight:800}
-.hero-panel{align-items:stretch;gap:24px}.hero-copy,.hero-mascot-card,.panel,.mission-card,.lesson-hero,.active-explainer,.feedback-panel{background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);border-radius:28px;padding:26px}.hero-copy{flex:1.2;min-width:0}.hero-copy h1{margin:12px 0 14px;font-size:clamp(42px,6vw,72px);line-height:.95;letter-spacing:-.04em}.hero-copy p{color:var(--muted);font-size:18px;line-height:1.7;max-width:680px}.hero-mascot-card{flex:.8;min-width:320px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;text-align:center}
+.hero-panel{align-items:stretch;gap:24px}.hero-copy,.hero-mascot-card,.panel,.mission-card,.lesson-hero,.active-explainer,.feedback-panel{background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);border-radius:28px;padding:26px;position:relative}.hero-copy{flex:1.2;min-width:0}.hero-copy h1{margin:12px 0 14px;font-size:clamp(42px,6vw,72px);line-height:.95;letter-spacing:-.04em;text-shadow:0 2px 0 rgba(0,0,0,0.15)}.hero-copy p{color:var(--muted);font-size:18px;line-height:1.7;max-width:680px}.hero-mascot-card{flex:.8;min-width:320px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;text-align:center}
 .mascot-badge,.pill,.eyebrow,.field-label,.mission-eyebrow{text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:900}.mascot-badge,.pill{background:rgba(255,255,255,.06);color:var(--text);border-radius:999px;padding:10px 14px}.pill-green{background:rgba(88,204,2,.18)}.pill-blue{background:rgba(102,169,255,.18)}.hero-stats{margin-top:24px;flex-wrap:wrap}.stat-card{min-width:120px;border-radius:24px;background:var(--panel-3);padding:18px}.stat-card strong{display:block;font-size:30px;font-weight:900}.stat-card span{color:var(--muted)}.mascot-caption{display:grid;gap:6px;margin-top:10px}.mascot-caption span{color:var(--muted);line-height:1.6}
-.mission-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.mission-card{min-height:164px}.mission-card strong{display:block;font-size:23px;margin:12px 0 8px}.mission-card p{color:var(--muted);margin:0;line-height:1.6}.mission-card.lime{background:linear-gradient(180deg,rgba(88,204,2,.18),var(--panel))}.mission-card.yellow{background:linear-gradient(180deg,rgba(255,216,74,.18),var(--panel))}.mission-card.blue{background:linear-gradient(180deg,rgba(102,169,255,.18),var(--panel))}
+.mission-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.mission-card{min-height:164px}.mission-card strong{display:block;font-size:23px;margin:12px 0 8px}.mission-card p{color:var(--muted);margin:0;line-height:1.6}.mission-card.lime{background:linear-gradient(180deg,rgba(88,204,2,.10),var(--panel));box-shadow:inset 0 0 0 1px rgba(88,204,2,.12),var(--shadow)}.mission-card.yellow{background:linear-gradient(180deg,rgba(255,216,74,.10),var(--panel));box-shadow:inset 0 0 0 1px rgba(255,216,74,.12),var(--shadow)}.mission-card.blue{background:linear-gradient(180deg,rgba(124,184,255,.10),var(--panel));box-shadow:inset 0 0 0 1px rgba(124,184,255,.12),var(--shadow)}
 .panel{margin-top:22px}.section-heading{margin-bottom:18px}.section-heading h2{margin:8px 0 0;font-size:32px}.eyebrow,.field-label,.mission-eyebrow{color:var(--muted)}.grid.two-up{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.lesson-stage-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.field-wrap{display:grid;gap:8px}
 .input-shell{display:flex;border:2px solid var(--line);background:var(--panel-3);border-radius:24px;overflow:hidden;transition:.2s ease}.input-shell.focused{transform:translateY(-1px);border-color:rgba(88,204,2,.45);box-shadow:0 0 0 4px rgba(88,204,2,.12)}.input,.concept-input{width:100%;border:2px solid var(--line);border-radius:20px;background:var(--panel-3);color:var(--text);padding:15px 16px;outline:none}.concept-input{border:0;border-radius:0;background:transparent;padding:19px 20px}.input::placeholder,.concept-input::placeholder,.textarea::placeholder{color:var(--muted)}.textarea{resize:vertical;min-height:120px}.dark{background:rgba(255,255,255,.05)}
 .cta-button{border:0;border-bottom:5px solid var(--lime-deep);border-radius:18px;background:var(--lime);color:#fff;padding:16px 22px;font-weight:900;letter-spacing:.02em;cursor:pointer;align-self:flex-start}.cta-button:disabled{cursor:not-allowed;opacity:.65}.cta-button.wide{width:100%;margin-top:14px}
@@ -457,9 +461,9 @@ const styles = `
 .level-grid{margin-top:22px;grid-template-columns:repeat(3,minmax(0,1fr))}.level-card{background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);color:var(--text);border-radius:26px;padding:24px;text-align:left;cursor:pointer}.level-card.active{transform:translateY(-4px);box-shadow:0 22px 52px rgba(0,0,0,.28)}.level-bar{width:42px;height:6px;border-radius:999px;margin-bottom:16px}.level-card strong{font-size:24px;display:block}.level-card span,.level-card p{color:var(--muted)}
 .error-banner{margin-top:18px;background:rgba(255,107,107,.14);border-radius:18px;padding:16px 18px;color:#ffdede}.lesson-stack{display:grid;gap:22px}.lesson-hero{display:flex;justify-content:space-between;gap:20px;align-items:start}.lesson-hero h2{margin:8px 0 10px;font-size:38px}.lesson-hero p{color:var(--muted);line-height:1.7;max-width:680px}.snapshot-card{min-width:220px;border-radius:24px;background:var(--panel-3);padding:18px}.snapshot-line{display:flex;justify-content:space-between;margin-top:10px;gap:12px}.snapshot-line span{color:var(--muted)}
 .tabs{flex-wrap:wrap;margin-bottom:16px}.tab{border:2px solid var(--line);background:var(--panel-3);color:var(--text);border-radius:18px;padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer}.tab.active{background:rgba(88,204,2,.14)}.tab small{color:var(--muted);display:block}.dot{width:12px;height:12px;border-radius:999px}.explanation-card{border-width:2px;border-style:solid;border-radius:26px;background:var(--panel-3);padding:24px}.explanation-card p{margin:10px 0 0;color:var(--text);line-height:1.9;font-size:17px}
-.stage-card,.info-panel,.library-card{border-radius:24px;background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);padding:22px}.stage-card p,.library-card p{color:var(--muted);line-height:1.7}.library-card strong{display:block;font-size:24px;margin:8px 0}.library-card small{color:var(--sun);font-weight:800}.bullet-stack{gap:10px;margin-top:12px}.bullet-card{border-radius:18px;background:var(--panel-3);padding:14px 15px;line-height:1.5}
+.stage-card,.info-panel,.library-card{border-radius:24px;background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);padding:22px}.stage-card p,.library-card p{color:var(--muted);line-height:1.7}.library-card strong{display:block;font-size:24px;margin:8px 0}.library-card small{color:var(--sun);font-weight:800}.bullet-stack{gap:10px;margin-top:12px}.bullet-card{border-radius:18px;background:var(--panel-3);padding:14px 15px;line-height:1.5}.hero-copy::before,.panel::before,.mission-card::before,.library-card::before,.stage-card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:repeating-linear-gradient(175deg,transparent 0 18px,rgba(255,255,255,0.015) 18px 19px,transparent 19px 36px);opacity:.7}
 .feedback-panel{margin-bottom:10px}.question-box{border-radius:24px;background:var(--panel-3);padding:18px}.question-row{padding:12px 0;border-bottom:1px solid var(--line);line-height:1.6}.question-row:last-child{border-bottom:0}.toggle-row{margin-top:18px;flex-wrap:wrap}.toggle-pill{border:2px solid var(--line);border-radius:999px;background:var(--panel);color:var(--text);padding:12px 16px;font-weight:800;cursor:pointer}.toggle-pill.active{background:rgba(88,204,2,.16);border-color:rgba(88,204,2,.38)}.toggle-pill.danger.active{background:rgba(255,107,107,.14);border-color:rgba(255,107,107,.35)}
-.coach-response{margin-top:20px;border-radius:24px;background:rgba(88,204,2,.12);padding:18px}.coach-response p{margin:8px 0;line-height:1.7}.coach-response small{color:var(--muted)}.eggsy{width:240px;max-width:100%}.eggsy.compact{width:42px}
+.coach-response{margin-top:20px;border-radius:24px;background:rgba(88,204,2,.12);padding:18px}.coach-response p{margin:8px 0;line-height:1.7}.coach-response small{color:var(--muted)}.eggzy{width:240px;max-width:100%}.eggzy.compact{width:42px}
 @media (max-width:960px){.hero-panel,.lesson-hero{flex-direction:column}.mission-strip,.level-grid,.grid.two-up,.lesson-stage-grid{grid-template-columns:1fr}.hero-mascot-card{min-width:0}}
 @media (max-width:720px){.page-frame{width:min(100% - 20px,1180px)}.topbar{flex-direction:column;align-items:flex-start}.brand-title{font-size:28px}.hero-copy h1{font-size:42px}.cta-button{width:100%}.input-shell{flex-direction:column}}
 `;
