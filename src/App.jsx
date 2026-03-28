@@ -124,6 +124,12 @@ export default function App() {
     previousLanguageRef.current = language;
   }, [language]);
 
+  useEffect(() => {
+    if (lesson) {
+      setActiveStageIndex(0);
+    }
+  }, [activeLevel, lesson]);
+
   function dismissAuthModal() {
     popupDismissedRef.current = true;
     window.localStorage.setItem("eggzy-auth-dismissed", "true");
@@ -475,18 +481,9 @@ export default function App() {
   const currentLanguageOption = languageOptions.find((option) => option.code === language) || languageOptions[0];
   const effectiveLearnerName = authUser?.displayName || learnerName || "";
   const currentLevel = localizedLevels.find((level) => level.id === activeLevel);
-  const activeLevelText = useMemo(() => {
-    if (!lesson) return "";
-    return [
-      lesson.levelExplanations?.[activeLevel] || "",
-      lesson.topic?.foundation || "",
-      lesson.topic?.coreIdea || "",
-      lesson.topic?.howItWorks || "",
-      lesson.topic?.realWorldExample || "",
-      lesson.topic?.summary || "",
-    ].filter(Boolean).join("\n\n");
-  }, [lesson, activeLevel]);
-  const activeStage = lesson?.stages?.[activeStageIndex] || null;
+  const activeStages = getLessonStagesForLevel(lesson, activeLevel);
+  const activeLevelText = lesson?.levelExplanations?.[activeLevel] || "";
+  const activeStage = activeStages[activeStageIndex] || null;
   const activeExplanationLabel = activeLevel === "child" ? uiCopy.elementaryExplanation : activeLevel === "beginner" ? uiCopy.intermediateExplanation : uiCopy.advancedExplanation;
   const flashcards = (lesson?.flashcards || []).slice(0, flashcardTarget);
   const activeFlashcard = flashcards[activeCardIndex] || null;
