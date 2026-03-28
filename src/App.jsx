@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LOCAL_TOPIC_LIBRARY } from "./topicLibrary.js";
+import { registerWithEmail, signInWithEmail, signInWithGoogle, signOutUser, watchAuthState } from "./firebase.js";
 import { DEFAULT_UI_COPY } from "../shared/localization.js";
 
 const DEFAULT_TOPICS = LOCAL_TOPIC_LIBRARY;
@@ -17,6 +18,16 @@ const STYLES = ["analogy", "story", "technical", "simple"];
 
 export default function App() {
   const [theme, setTheme] = useState("dark");
+  const [authUser, setAuthUser] = useState(null);
+  const [authToken, setAuthToken] = useState("");
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardData, setDashboardData] = useState(null);
   const [concept, setConcept] = useState("");
   const [topics, setTopics] = useState(DEFAULT_TOPICS);
   const [languageOptions, setLanguageOptions] = useState([{ code: "en", name: "English", nativeName: "English" }]);
@@ -50,10 +61,27 @@ export default function App() {
   const inputRef = useRef(null);
   const resultsRef = useRef(null);
   const previousLanguageRef = useRef("en");
+  const popupDismissedRef = useRef(false);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    popupDismissedRef.current = window.localStorage.getItem("eggzy-auth-dismissed") === "true";
+    const unsubscribe = watchAuthState(async (user) => {
+      setAuthUser(user);
+      setAuthToken(user ? await user.getIdToken() : "");
+      setAuthLoading(false);
+      if (!user && !popupDismissedRef.current) {
+        setAuthModalOpen(true);
+      }
+      if (user) {
+        setAuthModalOpen(false);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     void Promise.all([loadTopics(), loadLanguages()]);
@@ -71,6 +99,12 @@ export default function App() {
   }, [lesson]);
 
   useEffect(() => {
+    if (authUser?.displayName && !learnerName) {
+      setLearnerName(authUser.displayName);
+    }
+  }, [authUser, learnerName]);
+
+  useEffect(() => {
     void loadUiCopy(language);
     if (previousLanguageRef.current !== language && lesson && concept.trim()) {
       previousLanguageRef.current = language;
@@ -80,9 +114,64 @@ export default function App() {
     previousLanguageRef.current = language;
   }, [language]);
 
+  function dismissAuthModal() {
+    popupDismissedRef.current = true;
+    window.localStorage.setItem("eggzy-auth-dismissed", "true");
+    setAuthModalOpen(false);
+  }
+
+  async function handleGoogleLogin() {
+    try {
+      await signInWithGoogle();
+      setAuthModalOpen(false);
+    } catch (loginError) {
+      setError(loginError.message || "Unable to sign in right now.");
+    }
+  }
+
+  async function handleEmailAuth() {
+    try {
+      if (authMode === "signup") {
+        await registerWithEmail(authEmail, authPassword, learnerName || authEmail.split("@")[0]);
+      } else {
+        await signInWithEmail(authEmail, authPassword);
+      }
+      setAuthModalOpen(false);
+      setAuthEmail("");
+      setAuthPassword("");
+    } catch (loginError) {
+      setError(loginError.message || "Unable to authenticate right now.");
+    }
+  }
+
+  async function handleLogout() {
+    await signOutUser();
+    setDashboardOpen(false);
+  }
+
+  async function loadDashboard() {
+    if (!authToken) return;
+    setDashboardLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/dashboard`, { headers: { ...getAuthHeaders() } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Unable to load dashboard");
+      setDashboardData(data.dashboard);
+      setDashboardOpen(true);
+    } catch (dashboardError) {
+      setError(dashboardError.message || "Unable to load dashboard.");
+    } finally {
+      setDashboardLoading(false);
+    }
+  }
+
+  function getAuthHeaders() {
+    return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+  }
+
   async function loadLanguages() {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/languages`);
+      const res = await fetch(`${API_BASE_URL}/api/languages`, { headers: { ...getAuthHeaders() } });
       if (!res.ok) throw new Error("Language API unavailable");
       const data = await res.json();
       if (data.languages?.length) {
@@ -95,7 +184,7 @@ export default function App() {
 
   async function loadUiCopy(languageCode) {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/ui-copy?language=${languageCode}`);
+      const res = await fetch(`${API_BASE_URL}/api/ui-copy?language=${languageCode}`, { headers: { ...getAuthHeaders() } });
       if (!res.ok) throw new Error("UI copy unavailable");
       const data = await res.json();
       setUiCopy({
@@ -110,7 +199,7 @@ export default function App() {
   }
   async function loadTopics() {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/topics`);
+      const res = await fetch(`${API_BASE_URL}/api/topics`, { headers: { ...getAuthHeaders() } });
       if (!res.ok) throw new Error("Topic API unavailable");
       const data = await res.json();
       setTopics(data.topics?.length ? mergeTopicDetails(data.topics) : DEFAULT_TOPICS);
@@ -127,6 +216,7 @@ export default function App() {
     return {
       slowQuestions,
       wrongQuestions,
+      lessonPhase,
       quizScore,
       totalQuestions: quizItems.length,
       overlapScore: feedback?.overlapScore ?? null,
@@ -147,7 +237,7 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/explain`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           topicSlug: matchedTopic?.slug,
           customTopic: matchedTopic ? "" : concept.trim(),
@@ -218,8 +308,8 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/feedback`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, understood, learnerExplanation, confusionArea }),
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ sessionId, understood, learnerExplanation, confusionArea, performanceSignals: buildPerformanceSignals() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Unable to save feedback");
@@ -272,6 +362,7 @@ export default function App() {
   const showQuiz = lessonPhase === "quiz" || lessonPhase === "teachback";
   const showFlashcards = lessonPhase === "flashcards" || lessonPhase === "teachback";
   const showTeachBack = lessonPhase === "teachback";
+  const showExplanationPhase = lessonPhase === "explanation";
 
   return (
     <div className="app-shell">
@@ -287,11 +378,61 @@ export default function App() {
               <div className="brand-subtitle">{uiCopy.tagline}</div>
             </div>
           </div>
-          <button className="theme-toggle" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}>
-            <span>{theme === "dark" ? uiCopy.themeDarkQuest : uiCopy.themeSunnyQuest}</span>
-            <span>{theme === "dark" ? uiCopy.themeMoonOn : uiCopy.themeSunOn}</span>
-          </button>
+          <div className="topbar-actions">
+            {authUser ? <button className="auth-button" onClick={() => void loadDashboard()} disabled={dashboardLoading}>{dashboardLoading ? "Loading dashboard..." : "Dashboard"}</button> : null}
+            <button className="auth-button" onClick={() => authUser ? void handleLogout() : setAuthModalOpen(true)} disabled={authLoading}>
+              {authLoading ? "Loading..." : authUser ? `Logout ${authUser.displayName?.split(" ")[0] || "Learner"}` : "Login"}
+            </button>
+            <button className="theme-toggle" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}>
+              <span>{theme === "dark" ? uiCopy.themeDarkQuest : uiCopy.themeSunnyQuest}</span>
+              <span>{theme === "dark" ? uiCopy.themeMoonOn : uiCopy.themeSunOn}</span>
+            </button>
+          </div>
         </header>
+
+        {dashboardOpen ? (
+          <div className="modal-backdrop">
+            <div className="auth-modal panel dashboard-modal">
+              <button className="modal-close" onClick={() => setDashboardOpen(false)}>x</button>
+              <span className="eyebrow">Learner Dashboard</span>
+              <h2>{authUser?.displayName || "Your progress"}</h2>
+              <div className="dashboard-grid">
+                <div className="panel dashboard-card">
+                  <span className="eyebrow">Weak Topics</span>
+                  <div className="bullet-stack">{dashboardData?.weakTopics?.length ? dashboardData.weakTopics.map((item) => <div key={item.topic} className="bullet-card"><strong>{item.topic}</strong><small> Slow: {item.slowCount} | Wrong: {item.wrongCount} | Teach-back misses: {item.teachBackMisses}</small></div>) : <div className="bullet-card">No weak topics tracked yet.</div>}</div>
+                </div>
+                <div className="panel dashboard-card">
+                  <span className="eyebrow">Recent Learning</span>
+                  <div className="bullet-stack">{dashboardData?.recentEvents?.length ? dashboardData.recentEvents.map((item, index) => <div key={`${item.eventType}-${index}`} className="bullet-card"><strong>{item.topic || "Session"}</strong><small>{item.eventType} | {item.language || "English"}</small></div>) : <div className="bullet-card">No saved learning events yet.</div>}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {authModalOpen ? (
+          <div className="modal-backdrop">
+            <div className="auth-modal panel">
+              <button className="modal-close" onClick={dismissAuthModal}>x</button>
+              <span className="eyebrow">Secure Login</span>
+              <h2>Save your Eggzy progress</h2>
+              <p className="support-copy">Login to save difficult topics, slow questions, wrong answers, and your teach-back notes under your own profile.</p>
+              <div className="toggle-row">
+                <button className={`toggle-pill ${authMode === "login" ? "active" : ""}`} onClick={() => setAuthMode("login")}>Login</button>
+                <button className={`toggle-pill ${authMode === "signup" ? "active" : ""}`} onClick={() => setAuthMode("signup")}>Sign up</button>
+              </div>
+              <div className="auth-form">
+                <input className="input" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="Email" />
+                <input className="input" type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="Password" />
+              </div>
+              <div className="action-row">
+                <button className="cta-button" onClick={() => void handleGoogleLogin()}>Continue with Google</button>
+                <button className="cta-button secondary-cta" onClick={() => void handleEmailAuth()}>{authMode === "signup" ? "Create account" : "Login with email"}</button>
+                <button className="mini-button secondary-button" onClick={dismissAuthModal}>Maybe later</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <section className="hero-panel">
           <div className="hero-copy">
@@ -382,59 +523,52 @@ export default function App() {
               </div>
             </section>
 
-            <section className="panel deep-explainer">
-              <div className="tabs">
-                {localizedLevels.map((level) => (
-                  <button key={level.id} className={`tab ${activeLevel === level.id ? "active" : ""}`} onClick={() => setActiveLevel(level.id)}>
-                    <span className="dot" style={{ background: level.accent }} />
-                    <div><strong>{level.label}</strong><small>{level.sublabel}</small></div>
-                  </button>
-                ))}
-              </div>
-              <div className="explanation-card long-form" style={{ borderColor: currentLevel?.accent }}>
-                <span className="eyebrow">{activeExplanationLabel}</span>
-                <p>{activeLevelText}</p>
-              </div>
-              {activeLevel !== "child" ? (
-                <div className="learning-modes grid three-up">
-                  <ModeCard title={uiCopy.analogyLens} body={lesson.learningModes.analogy} />
-                  <ModeCard title={uiCopy.stepByStepLens} body={lesson.learningModes.stepByStep} />
-                  <ModeCard title={uiCopy.realLifeLens} body={lesson.learningModes.realLife} />
-                </div>
-              ) : null}
-            </section>
+            {showExplanationPhase ? (
+              <>
+                <section className="panel deep-explainer">
+                  <div className="tabs">
+                    {localizedLevels.map((level) => (
+                      <button key={level.id} className={`tab ${activeLevel === level.id ? "active" : ""}`} onClick={() => setActiveLevel(level.id)}>
+                        <span className="dot" style={{ background: level.accent }} />
+                        <div><strong>{level.label}</strong><small>{level.sublabel}</small></div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="explanation-card long-form" style={{ borderColor: currentLevel?.accent }}>
+                    <span className="eyebrow">{activeExplanationLabel}</span>
+                    <p>{activeLevelText}</p>
+                  </div>
+                  {activeLevel !== "child" ? (
+                    <div className="learning-modes grid three-up">
+                      <ModeCard title={uiCopy.analogyLens} body={lesson.learningModes.analogy} />
+                      <ModeCard title={uiCopy.stepByStepLens} body={lesson.learningModes.stepByStep} />
+                      <ModeCard title={uiCopy.realLifeLens} body={lesson.learningModes.realLife} />
+                    </div>
+                  ) : null}
+                </section>
 
-            <section className="panel navigator-panel">
-              <div className="section-heading"><span className="eyebrow">{uiCopy.lessonNavigationEyebrow}</span><h2>{uiCopy.lessonNavigationTitle}</h2></div>
-              <div className="slide-shell">
-                <button className="nav-arrow" onClick={() => setActiveStageIndex((current) => Math.max(0, current - 1))} disabled={activeStageIndex === 0}>�</button>
-                <div className="slide-card">
-                  <div className="slide-progress">{activeStageIndex + 1} / {lesson.stages.length}</div>
-                  <h3>{activeStage?.title}</h3>
-                  <p>{activeStage?.body}</p>
-                </div>
-                <button className="nav-arrow" onClick={() => setActiveStageIndex((current) => Math.min(lesson.stages.length - 1, current + 1))} disabled={activeStageIndex === lesson.stages.length - 1}>�</button>
-              </div>
-              <div className="progress-dots">
-                {lesson.stages.map((stage, index) => (
-                  <button key={stage.id} className={`progress-dot ${index === activeStageIndex ? "active" : ""}`} onClick={() => setActiveStageIndex(index)}>{stage.title}</button>
-                ))}
-              </div>
-            </section>
-
-            <section className="grid two-up">
-              <article className="panel info-panel"><span className="eyebrow">{uiCopy.confusionHotspots}</span><div className="bullet-stack">{lesson.confusionHotspots.map((item) => <div key={item} className="bullet-card">{item}</div>)}</div></article>
-              <article className="panel info-panel"><span className="eyebrow">{uiCopy.adaptiveCoaching}</span><div className="bullet-stack">{lesson.adaptiveTips.map((item) => <div key={item} className="bullet-card">{item}</div>)}</div></article>
-            </section>
-
-            <section className="panel revision-entry">
-              <div className="section-heading"><span className="eyebrow">{uiCopy.nextStepEyebrow}</span><h2>{uiCopy.nextStepTitle}</h2></div>
-              <p className="support-copy">{uiCopy.revisionChoiceBody}</p>
-              <div className="action-row">
-                <button className="cta-button" onClick={() => setLessonPhase("revise")}>{uiCopy.continueToRevision}</button>
-                {lessonPhase !== "explanation" ? <button className="mini-button secondary-button" onClick={() => setLessonPhase("explanation")}>{uiCopy.backToExplanation}</button> : null}
-              </div>
-            </section>
+                <section className="panel navigator-panel">
+                  <div className="section-heading"><span className="eyebrow">{uiCopy.lessonNavigationEyebrow}</span><h2>{uiCopy.lessonNavigationTitle}</h2></div>
+                  <div className="slide-shell">
+                    <button className="nav-arrow" onClick={() => setActiveStageIndex((current) => Math.max(0, current - 1))} disabled={activeStageIndex === 0}>&lt;</button>
+                    <div className="slide-card">
+                      <div className="slide-progress">{activeStageIndex + 1} / {lesson.stages.length}</div>
+                      <h3>{activeStage?.title}</h3>
+                      <p>{activeStage?.body}</p>
+                    </div>
+                    <button className="nav-arrow" onClick={() => setActiveStageIndex((current) => Math.min(lesson.stages.length - 1, current + 1))} disabled={activeStageIndex === lesson.stages.length - 1}>&gt;</button>
+                  </div>
+                  <div className="progress-dots">
+                    {lesson.stages.map((stage, index) => (
+                      <button key={stage.id} className={`progress-dot ${index === activeStageIndex ? "active" : ""}`} onClick={() => setActiveStageIndex(index)}>{stage.title}</button>
+                    ))}
+                  </div>
+                  <div className="action-row inline-revision-action">
+                    <button className="cta-button" onClick={() => setLessonPhase("revise")}>{uiCopy.continueToRevision}</button>
+                  </div>
+                </section>
+              </>
+            ) : null}
 
             {showRevisionHub ? (
               <section className="panel revision-choice-panel">
@@ -807,10 +941,10 @@ const styles = `
 :root[data-theme="light"] { --bg:#f7f1de; --bg-soft:#efe6cb; --panel:#fffdf5; --panel-2:#faf4e3; --panel-3:#f3ecd8; --text:#1d241d; --muted:#6f7668; --line:rgba(72,61,38,0.10); --shadow:0 18px 50px rgba(96,82,49,0.10); --lime:#58cc02; --lime-deep:#46a302; --sun:#ffca3a; --sky:#4d8ff7; --danger:#f25f5c; }
 *{box-sizing:border-box} body{margin:0;font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text)} button,input,textarea,select{font:inherit}
 .app-shell{min-height:100vh;background:radial-gradient(circle at top left, rgba(88,204,2,0.10), transparent 24%),radial-gradient(circle at 80% 10%, rgba(255,216,74,0.10), transparent 22%),repeating-linear-gradient(0deg, rgba(255,255,255,0.018) 0, rgba(255,255,255,0.018) 2px, transparent 2px, transparent 44px),linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);color:var(--text);position:relative;overflow-x:hidden}
-.background-orb{position:fixed;border-radius:999px;filter:blur(80px);opacity:.25;pointer-events:none}.orb-one{width:340px;height:340px;background:var(--lime);top:-100px;left:-80px}.orb-two{width:280px;height:280px;background:var(--sun);right:-80px;top:160px}
-.page-frame{width:min(1240px,calc(100% - 32px));margin:0 auto;padding:28px 0 72px;position:relative;z-index:1}.topbar,.hero-panel,.grid,.level-grid,.tabs,.toggle-row,.hero-stats,.pill-row,.brand-wrap,.flashcard-nav,.slide-shell,.progress-dots,.quiz-question-head{display:flex;gap:16px}.topbar,.hero-panel,.toggle-row,.slide-shell,.flashcard-nav,.quiz-question-head{align-items:center}.topbar,.hero-panel{justify-content:space-between}.grid,.level-grid,.topic-grid,.bullet-stack,.quiz-options,.quiz-list,.learning-modes,.teachback-grid{display:grid}.hero-panel,.lesson-stack{margin-top:22px}
-.brand-chip,.theme-toggle,.panel,.level-card,.topic-chip,.stat-card,.library-card,.bullet-card,.error-banner,.snapshot-card,.explanation-card,.question-box,.coach-response,.mode-card,.slide-card,.flashcard,.quiz-question,.insight-panel{border:2px solid var(--line);box-shadow:var(--shadow)}
-.brand-chip{width:66px;height:66px;border-radius:22px;background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);display:grid;place-items:center}.brand-title{font-size:34px;font-weight:900;line-height:1;font-family:'Schoolbell',cursive}.brand-subtitle{color:var(--muted);font-size:14px}.theme-toggle{border-radius:999px;background:var(--panel);color:var(--text);padding:12px 18px;display:flex;gap:18px;align-items:center;cursor:pointer;font-weight:800}
+.background-orb{position:fixed;border-radius:999px;filter:blur(80px);opacity:.25;pointer-events:none}.orb-one{width:340px;height:340px;background:var(--lime);top:-100px;left:-80px}.orb-two{width:280px;height:280px;background:var(--sun);right:-80px;top:160px}.modal-backdrop{position:fixed;inset:0;background:rgba(4,10,8,.62);display:grid;place-items:center;padding:24px;z-index:10}.auth-modal{width:min(520px,100%);background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);border-radius:28px;padding:26px;position:relative}.dashboard-modal{width:min(920px,100%)}.dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:16px}.dashboard-card{margin-top:0}.auth-form{display:grid;gap:12px;margin-top:16px}.auth-modal h2{margin:10px 0 12px;font-size:36px;font-family:'Schoolbell',cursive}.modal-close{position:absolute;top:14px;right:14px;width:40px;height:40px;border-radius:999px;border:0;background:var(--panel-3);color:var(--text);font-size:22px;cursor:pointer}.secondary-cta{background:var(--sun);border-bottom-color:#c9950c;color:#1d241d}
+.page-frame{width:min(1240px,calc(100% - 32px));margin:0 auto;padding:28px 0 72px;position:relative;z-index:1}.topbar,.hero-panel,.grid,.level-grid,.tabs,.toggle-row,.hero-stats,.pill-row,.brand-wrap,.flashcard-nav,.slide-shell,.progress-dots,.quiz-question-head,.topbar-actions{display:flex;gap:16px}.topbar,.hero-panel,.toggle-row,.slide-shell,.flashcard-nav,.quiz-question-head,.topbar-actions{align-items:center}.topbar,.hero-panel{justify-content:space-between}.grid,.level-grid,.topic-grid,.bullet-stack,.quiz-options,.quiz-list,.learning-modes,.teachback-grid{display:grid}.hero-panel,.lesson-stack{margin-top:22px}
+.brand-chip,.theme-toggle,.auth-button,.panel,.level-card,.topic-chip,.stat-card,.library-card,.bullet-card,.error-banner,.snapshot-card,.explanation-card,.question-box,.coach-response,.mode-card,.slide-card,.flashcard,.quiz-question,.insight-panel,.auth-modal{border:2px solid var(--line);box-shadow:var(--shadow)}
+.brand-chip{width:66px;height:66px;border-radius:22px;background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);display:grid;place-items:center}.brand-title{font-size:34px;font-weight:900;line-height:1;font-family:'Schoolbell',cursive}.brand-subtitle{color:var(--muted);font-size:14px}.auth-button,.theme-toggle{border-radius:999px;background:var(--panel);color:var(--text);padding:12px 18px;display:flex;gap:18px;align-items:center;cursor:pointer;font-weight:800}.auth-button{background:var(--panel-3)}
 .hero-copy,.hero-mascot-card,.panel{background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);border-radius:28px;padding:26px;position:relative}.hero-copy{flex:1.2;min-width:0}.hero-copy h1{margin:12px 0 14px;font-size:clamp(40px,5vw,66px);line-height:1;font-family:'Schoolbell',cursive}.hero-copy p,.slide-card p,.mode-card p,.question-box,.coach-response p,.library-card p{color:var(--muted);line-height:1.7}.hero-mascot-card{flex:.8;min-width:320px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;text-align:center}
 .mascot-badge,.pill,.eyebrow,.field-label{text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:900}.mascot-badge,.pill{background:rgba(255,255,255,.06);color:var(--text);border-radius:999px;padding:10px 14px}.pill-green{background:rgba(88,204,2,.18)}.pill-blue{background:rgba(102,169,255,.18)}.hero-stats{margin-top:24px;flex-wrap:wrap}.stat-card{min-width:120px;border-radius:24px;background:var(--panel-3);padding:18px}.stat-card strong{display:block;font-size:30px;font-weight:900}.stat-card span{color:var(--muted)}.mascot-caption{display:grid;gap:6px;margin-top:10px}.mascot-caption span{color:var(--muted);line-height:1.6}
 .panel{margin-top:22px}.section-heading{margin-bottom:18px}.section-heading h2{margin:8px 0 0;font-size:32px;font-family:'Schoolbell',cursive}.support-copy{margin:0;color:var(--muted);line-height:1.7}.eyebrow,.field-label{color:var(--muted)}.grid.two-up{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid.three-up{grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.field-wrap{display:grid;gap:8px}
@@ -826,9 +960,10 @@ const styles = `
 .quiz-score{font-weight:900;color:var(--sun);margin-bottom:14px}.quiz-list{gap:14px}.quiz-question{display:grid;gap:14px}.quiz-options{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.quiz-option{background:var(--panel-3);border-bottom-color:rgba(255,255,255,.18);text-align:left}.quiz-option.selected{outline:2px solid rgba(255,255,255,.18)}.quiz-option.correct{background:rgba(88,204,2,.18);border-bottom-color:var(--lime)}.quiz-option.wrong{background:rgba(255,107,107,.16);border-bottom-color:#db5a5a}.slow-chip{background:rgba(255,216,74,.16);color:var(--sun);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800}
 .question-box{border-radius:24px;background:var(--panel-3);padding:18px}.question-row{padding:12px 0;border-bottom:1px solid var(--line);line-height:1.6}.question-row:last-child{border-bottom:0}.toggle-row{margin-top:18px;flex-wrap:wrap}.toggle-pill{border:2px solid var(--line);border-radius:999px;background:var(--panel);color:var(--text);padding:12px 16px;font-weight:800;cursor:pointer}.toggle-pill.active{background:rgba(88,204,2,.16);border-color:rgba(88,204,2,.38)}.toggle-pill.danger.active{background:rgba(255,107,107,.14);border-color:rgba(255,107,107,.35)}.slow-summary{margin-top:18px;color:var(--muted)}
 .coach-response{margin-top:20px;border-radius:24px;background:rgba(88,204,2,.12);padding:18px}.coach-response small{color:var(--muted)}.quiz-summary-card{background:rgba(124,184,255,.12)}.teachback-grid{margin-top:16px}.eggzy{width:260px;max-width:100%}.eggzy.compact{width:42px}
-@media (max-width:1080px){.grid.three-up,.quiz-options,.level-grid,.grid.two-up,.teachback-grid,.choice-grid{grid-template-columns:1fr}.hero-panel,.lesson-hero,.slide-shell{flex-direction:column}.nav-arrow{width:100%}.slide-card{min-height:320px}.slide-card h3{font-size:38px}.slide-card p{font-size:18px}}
-@media (max-width:720px){.page-frame{width:min(100% - 20px,1240px)}.topbar{flex-direction:column;align-items:flex-start}.brand-title{font-size:28px}.hero-copy h1{font-size:42px}.cta-button{width:100%}.input-shell{flex-direction:column}.flashcard-face{font-size:22px}}
+@media (max-width:1080px){.grid.three-up,.quiz-options,.level-grid,.grid.two-up,.teachback-grid,.choice-grid,.dashboard-grid{grid-template-columns:1fr}.hero-panel,.lesson-hero,.slide-shell{flex-direction:column}.nav-arrow{width:100%}.slide-card{min-height:320px}.slide-card h3{font-size:38px}.slide-card p{font-size:18px}}
+@media (max-width:720px){.page-frame{width:min(100% - 20px,1240px)}.topbar,.topbar-actions{flex-direction:column;align-items:flex-start}.brand-title{font-size:28px}.hero-copy h1{font-size:42px}.cta-button{width:100%}.input-shell{flex-direction:column}.flashcard-face{font-size:22px}}
 `;
+
 
 
 

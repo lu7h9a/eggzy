@@ -3,6 +3,8 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { createDatabase, getTopicBySlug, listTopics } from "./db.js";
+import { verifyFirebaseToken } from "./auth.js";
+import { getUserDashboard, recordLearningEvent } from "./mongo.js";
 import { DEFAULT_UI_COPY, LANGUAGE_OPTIONS } from "../shared/localization.js";
 
 const app = express();
@@ -16,9 +18,15 @@ const uiCopyCache = new Map();
 
 app.use(cors());
 app.use(express.json());
+app.use(async (req, _res, next) => {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  req.user = await verifyFirebaseToken(token);
+  next();
+});
 
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, seededTopics: listTopics(db).length, aiProvider: getAiProvider() });
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true, seededTopics: listTopics(db).length, aiProvider: getAiProvider(), authenticated: Boolean(req.user) });
 });
 
 app.get("/api/languages", (_req, res) => {
@@ -54,6 +62,15 @@ app.get("/api/topics/:slug", (req, res) => {
     return res.status(404).json({ error: "Topic not found" });
   }
   return res.json({ topic });
+});
+
+app.get("/api/dashboard", async (req, res) => {
+  if (!req.user?.uid) {
+    return res.status(401).json({ error: "Login required" });
+  }
+
+  const dashboard = await getUserDashboard(req.user.uid);
+  return res.json({ dashboard });
 });
 
 app.post("/api/explain", async (req, res) => {
@@ -92,6 +109,8 @@ app.post("/api/explain", async (req, res) => {
     previousBehavior,
   };
 
+  const authUser = buildAuthUser(req.user);
+
   const learnerProfileId = upsertLearnerProfile(db, {
     learnerName,
     learnerLevel,
@@ -119,6 +138,29 @@ app.post("/api/explain", async (req, res) => {
     JSON.stringify(lesson)
   ).lastInsertRowid;
 
+  void recordLearningEvent({
+    user: authUser,
+    learnerName,
+    eventType: generationMode === "lesson" ? "lesson_requested" : generationMode,
+    topic: lesson.topic.title,
+    topicSlug: topic?.slug || null,
+    generationMode,
+    lessonPhase: generationMode === "lesson" ? "explanation" : generationMode,
+    learnerLevel,
+    mood,
+    preferredStyle,
+    interest,
+    language,
+    slowQuestions: performanceSignals?.slowQuestions || [],
+    wrongQuestions: performanceSignals?.wrongQuestions || [],
+    missedConcepts: performanceSignals?.missedConcepts || [],
+    confusionArea: performanceSignals?.confusionArea || null,
+    overlapScore: performanceSignals?.overlapScore ?? null,
+    quizScore: performanceSignals?.quizScore ?? null,
+    totalQuestions: performanceSignals?.totalQuestions ?? null,
+    learnerExplanation: performanceSignals?.learnerExplanation || null,
+  });
+
   return res.json({
     sessionId,
     lesson,
@@ -126,7 +168,7 @@ app.post("/api/explain", async (req, res) => {
 });
 
 app.post("/api/feedback", (req, res) => {
-  const { sessionId, understood = false, learnerExplanation = "", confusionArea = "" } = req.body || {};
+  const { sessionId, understood = false, learnerExplanation = "", confusionArea = "", performanceSignals = {} } = req.body || {};
   const session = db.prepare("SELECT * FROM learning_sessions WHERE id = ?").get(sessionId);
 
   if (!session) {
@@ -157,6 +199,30 @@ app.post("/api/feedback", (req, res) => {
     coachingResponse
   );
 
+  void recordLearningEvent({
+    user: buildAuthUser(req.user),
+    learnerName: lesson.learnerSnapshot?.learnerName || null,
+    eventType: "teachback_submitted",
+    topic: lesson.topic.title,
+    topicSlug: lesson.topic.slug || null,
+    generationMode: "feedback",
+    lessonPhase: "teachback",
+    learnerLevel: session.active_level,
+    mood: lesson.learnerSnapshot?.mood || null,
+    preferredStyle: lesson.learnerSnapshot?.preferredStyle || null,
+    interest: lesson.learnerSnapshot?.interest || null,
+    language: lesson.learnerSnapshot?.language || "English",
+    slowQuestions: performanceSignals?.slowQuestions || [],
+    wrongQuestions: performanceSignals?.wrongQuestions || [],
+    missedConcepts: performanceSignals?.missedConcepts || [],
+    confusionArea,
+    overlapScore,
+    quizScore: performanceSignals?.quizScore ?? null,
+    totalQuestions: performanceSignals?.totalQuestions ?? null,
+    learnerExplanation,
+    feedbackAction: understood ? "advance" : "reteach",
+  });
+
   return res.json({
     overlapScore,
     coachingResponse,
@@ -164,9 +230,13 @@ app.post("/api/feedback", (req, res) => {
   });
 });
 
-app.listen(port, () => {
-  console.log(`Eggzy API running on http://localhost:${port}`);
-});
+export { app };
+
+if (process.env.SERVER_MODE !== "function") {
+  app.listen(port, () => {
+    console.log(`Eggzy API running on http://localhost:${port}`);
+  });
+}
 
 function upsertLearnerProfile(
   dbInstance,
@@ -914,3 +984,16 @@ function mergeUiCopy(copy) {
 
 
 
+
+
+function buildAuthUser(decodedToken) {
+  if (!decodedToken) {
+    return null;
+  }
+
+  return {
+    uid: decodedToken.uid,
+    email: decodedToken.email || null,
+    name: decodedToken.name || decodedToken.email || null,
+  };
+}
