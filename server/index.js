@@ -82,6 +82,36 @@ app.get("/api/history", async (req, res) => {
   return res.json({ history });
 });
 
+app.post("/api/hesitation", async (req, res) => {
+  if (!req.user?.uid) {
+    return res.status(200).json({ ok: false });
+  }
+
+  const { remoteSessionId = null, topic = "", topicSlug = null, topicCategory = "General", learnerLevel = "beginner", mood = "focused", preferredStyle = "analogy", interest = "", language = "English", question = null } = req.body || {};
+  if (!question?.prompt) {
+    return res.status(400).json({ error: "Question note required" });
+  }
+
+  await recordLearningEvent({
+    user: buildAuthUser(req.user),
+    learnerName: req.user?.name || req.user?.email || null,
+    lessonSessionId: remoteSessionId,
+    eventType: "question_hesitation",
+    topic,
+    topicSlug,
+    generationMode: "quiz",
+    lessonPhase: "quiz",
+    learnerLevel,
+    mood,
+    preferredStyle,
+    interest,
+    language,
+    slowQuestions: [question],
+    notes: `${question.category || "Quiz hesitation"}: ${question.prompt}`,
+  });
+
+  return res.json({ ok: true });
+});
 app.post("/api/explain", async (req, res) => {
   const {
     topicSlug,
@@ -1112,6 +1142,7 @@ function buildAuthUser(decodedToken) {
     name: decodedToken.name || decodedToken.email || null,
   };
 }
+
 
 
 

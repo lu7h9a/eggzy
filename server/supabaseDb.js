@@ -126,6 +126,17 @@ function buildWeakTopics(events = []) {
   return [...weakTopicMap.values()].sort((a, b) => (b.slowCount + b.wrongCount + b.teachBackMisses) - (a.slowCount + a.wrongCount + a.teachBackMisses));
 }
 
+function extractHesitationNotes(events = []) {
+  return events
+    .flatMap((event) => (event.slow_questions || []).map((item) => ({
+      topic: item.topic || event.topic || "Unknown topic",
+      topicCategory: item.topicCategory || "General",
+      category: item.category || "Quiz hesitation",
+      prompt: item.prompt || item,
+      createdAt: event.created_at || null,
+    })))
+    .slice(0, 8);
+}
 export async function getUserDashboard(uid) {
   const client = getClient();
   if (!client || !uid) {
@@ -150,6 +161,7 @@ export async function getUserDashboard(uid) {
       lastTopic: profile.last_topic || null,
     } : null,
     weakTopics: buildWeakTopics(recentEvents),
+    hesitationNotes: extractHesitationNotes(recentEvents),
     recentEvents,
   };
 }
@@ -211,9 +223,10 @@ export async function getUserLearningContext(uid) {
     weakTopics,
     recentTopics: [...new Set(recentEvents.map((event) => event.topic).filter(Boolean))].slice(0, 8),
     repeatedWrongQuestions: recentEvents.flatMap((event) => event.wrong_questions || []).slice(0, 8),
-    repeatedSlowQuestions: recentEvents.flatMap((event) => event.slow_questions || []).slice(0, 8),
+    repeatedSlowQuestions: recentEvents.flatMap((event) => (event.slow_questions || []).map((item) => item.prompt || item)).slice(0, 8),
     missedConcepts: recentEvents.flatMap((event) => event.missed_concepts || []).slice(0, 8),
     lastConfusionArea: recentEvents.find((event) => event.confusion_area)?.confusion_area || null,
   };
 }
+
 

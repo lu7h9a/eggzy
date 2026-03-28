@@ -407,20 +407,62 @@ export default function App() {
     }
   }
 
+  async function logHesitation(note) {
+    if (!authToken || !remoteSessionId || !lesson) return;
+
+    try {
+      await fetch(`${API_BASE_URL}/api/hesitation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({
+          remoteSessionId,
+          topic: lesson.topic.title,
+          topicSlug: lesson.topic.slug || null,
+          topicCategory: lesson.topic.category || "General",
+          learnerLevel: lesson.learnerSnapshot?.level || activeLevel,
+          mood: lesson.learnerSnapshot?.mood || mood,
+          preferredStyle: lesson.learnerSnapshot?.preferredStyle || preferredStyle,
+          interest: lesson.learnerSnapshot?.interest || interest,
+          language: lesson.learnerSnapshot?.language || currentLanguageOption?.name || "English",
+          question: note,
+        }),
+      });
+    } catch {}
+  }
+
+  function markSlowQuestion(item) {
+    const note = {
+      id: item.id,
+      prompt: item.prompt,
+      category: "Quiz hesitation",
+      topic: lesson?.topic?.title || concept || "Current topic",
+      topicCategory: lesson?.topic?.category || "General",
+      hint: item.hint,
+    };
+
+    setSlowQuestions((current) => {
+      if (current.some((entry) => entry.id === item.id)) return current;
+      void logHesitation(note);
+      return [...current, note];
+    });
+
+    setHoverInsight(`${item.hint} Eggzy saved this as a reteach note for your dashboard.`);
+  }
+
   function handleQuizHover(item) {
     hoverStartRef.current[item.id] = Date.now();
     window.clearTimeout(hoverTimerRef.current);
     hoverTimerRef.current = window.setTimeout(() => {
-      setHoverInsight(item.hint);
-      setSlowQuestions((current) => (current.includes(item.id) ? current : [...current, item.id]));
-    }, 2600);
+      markSlowQuestion(item);
+    }, 60000);
   }
 
   function clearQuizHover(itemId) {
     window.clearTimeout(hoverTimerRef.current);
     const start = hoverStartRef.current[itemId];
-    if (start && Date.now() - start > 2600) {
-      setSlowQuestions((current) => (current.includes(itemId) ? current : [...current, itemId]));
+    if (start && Date.now() - start > 60000) {
+      const item = quizItems.find((entry) => entry.id === itemId);
+      if (item) markSlowQuestion(item);
     }
   }
 
@@ -498,8 +540,8 @@ export default function App() {
                   <div className="bullet-stack">{dashboardData?.weakTopics?.length ? dashboardData.weakTopics.map((item) => <div key={item.topic} className="bullet-card"><strong>{item.topic}</strong><small> Slow: {item.slowCount} | Wrong: {item.wrongCount} | Teach-back misses: {item.teachBackMisses}</small></div>) : <div className="bullet-card">No weak topics tracked yet.</div>}</div>
                 </div>
                 <div className="panel dashboard-card">
-                  <span className="eyebrow">Recent Learning</span>
-                  <div className="bullet-stack">{dashboardData?.recentEvents?.length ? dashboardData.recentEvents.map((item, index) => <div key={`${item.eventType}-${index}`} className="bullet-card"><strong>{item.topic || "Session"}</strong><small>{item.eventType} | {item.language || "English"}</small></div>) : <div className="bullet-card">No saved learning events yet.</div>}</div>
+                  <span className="eyebrow">Hesitation Notes</span>
+                  <div className="bullet-stack">{dashboardData?.hesitationNotes?.length ? dashboardData.hesitationNotes.map((item, index) => <div key={`${item.topic}-${index}`} className="bullet-card"><strong>{item.topic}</strong><small>{item.topicCategory} | {item.category}</small><small>{item.prompt}</small></div>) : <div className="bullet-card">No long-hover hesitation notes yet.</div>}</div>
                 </div>
               </div>
             </div>
@@ -711,7 +753,7 @@ export default function App() {
                     <div key={item.id} className="quiz-question" onMouseEnter={() => handleQuizHover(item)} onMouseLeave={() => clearQuizHover(item.id)}>
                       <div className="quiz-question-head">
                         <strong>Q{index + 1}. {item.prompt}</strong>
-                        {slowQuestions.includes(item.id) ? <span className="slow-chip">{uiCopy.needsReteach}</span> : null}
+                        {slowQuestions.some((entry) => entry.id === item.id) ? <span className="slow-chip">{uiCopy.needsReteach}</span> : null}
                       </div>
                       <div className="quiz-options">
                         {item.options.map((option, optionIndex) => {
@@ -977,7 +1019,8 @@ function analyzeTeachBack(lesson, learnerExplanation, confusionArea, interest, s
   const learnerTokens = new Set(tokenize(learnerExplanation));
   const missedConcepts = keywords.filter((item) => !learnerTokens.has(item.token)).slice(0, 4).map((item) => item.label);
   const strongPoints = keywords.filter((item) => learnerTokens.has(item.token)).slice(0, 3).map((item) => item.label);
-  const slowPrompts = (lesson?.quizQuestions || buildQuizQuestions(lesson, interest)).filter((item) => slowQuestions.includes(item.id)).map((item) => item.prompt);
+  const slowIds = slowQuestions.map((item) => item.id);
+  const slowPrompts = (lesson?.quizQuestions || buildQuizQuestions(lesson, interest)).filter((item) => slowIds.includes(item.id)).map((item) => item.prompt);
   const reteachSteps = [
     `Return to the ${findRelevantStage(confusionArea, lesson)} slide and explain it in simpler words.`,
     missedConcepts[0] ? `Make sure you include this missing idea next time: ${missedConcepts[0]}.` : `Rebuild the explanation in the order purpose -> mechanism -> example.`,
@@ -1107,6 +1150,7 @@ const styles = `
 @media (max-width:1080px){.grid.three-up,.quiz-options,.level-grid,.grid.two-up,.teachback-grid,.choice-grid,.dashboard-grid{grid-template-columns:1fr}.hero-panel,.lesson-hero,.slide-shell{flex-direction:column}.nav-arrow{width:100%}.slide-card{min-height:320px}.slide-card h3{font-size:38px}.slide-card p{font-size:18px}}
 @media (max-width:720px){.page-frame{width:min(100% - 20px,1240px)}.topbar,.topbar-actions{flex-direction:column;align-items:flex-start}.brand-title{font-size:28px}.hero-copy h1{font-size:42px}.cta-button{width:100%}.input-shell{flex-direction:column}.flashcard-face{font-size:22px}}
 `;
+
 
 
 
