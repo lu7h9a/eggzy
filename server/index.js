@@ -1,4 +1,4 @@
-
+﻿
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -66,6 +66,9 @@ app.post("/api/explain", async (req, res) => {
     preferredStyle = "analogy",
     interest = "",
     language = "English",
+    generationMode = "lesson",
+    performanceSignals = {},
+    regenerationSeed = "",
     confusionPattern = "",
     previousBehavior = "",
   } = req.body || {};
@@ -81,6 +84,10 @@ app.post("/api/explain", async (req, res) => {
     preferredStyle,
     interest,
     language,
+    learnerName,
+    generationMode,
+    performanceSignals,
+    regenerationSeed,
     confusionPattern,
     previousBehavior,
   };
@@ -254,6 +261,13 @@ function buildLessonPrompt({ topic, customTopic, learner }) {
   const moodTone = getMoodTone(learner.mood);
   const styleLens = getStyleLens(learner.preferredStyle);
   const levelGuide = getLevelGuide(learner.learnerLevel);
+  const performanceSummary = JSON.stringify(learner.performanceSignals || {});
+  const generationModeNotes = {
+    lesson: "Give the full best teaching experience from explanation through revision.",
+    quiz_refresh: "Keep the lesson coherent, but prioritize generating a fresh set of quiz questions that are meaningfully different from before.",
+    flashcards_refresh: "Keep the lesson coherent, but prioritize generating fresh flashcards with different wording, prompts, and memory cues.",
+    reteach: "Reteach the concept with a noticeably different approach that directly addresses the learner's weak spots, hesitation, and mistakes.",
+  };
 
   return `
 You are Eggzy, an adaptive AI teacher. Return only valid JSON.
@@ -266,12 +280,18 @@ Learner profile:
 - preferred style: ${learner.preferredStyle}
 - interest: ${learner.interest || "general"}
 - language: ${learner.language || "English"}
+- learner name: ${learner.learnerName || "not provided"}
+- generation mode: ${learner.generationMode || "lesson"}
+- performance signals: ${performanceSummary}
+- regeneration seed: ${learner.regenerationSeed || "none"}
 
 Lesson rules:
 - Teach in the learner's chosen language.
 - Use the learner's interest only inside the child/elementary explanation and child-friendly examples. Do not weave it into intermediate or advanced explanations.
 - Sound like a patient teacher, not a chatbot.
+- Use every learner detail you were given to customize the answer.
 - Include foundation, core idea, how it works, real-world example, and summary.
+- Give as much detail as it requires to explain the topic completely, not just define it.
 - Make the explanation rich enough to genuinely teach the topic completely, not just define it.
 - Make each stage body detailed, content-rich, and roughly 90-140 words.
 - Include learning modes for analogy, stepByStep, and realLife.
@@ -279,6 +299,9 @@ Lesson rules:
 - Include 5 flashcards for revision.
 - Include 4 MCQ quiz questions with exactly 4 options each, a correctAnswer index, and a reteach hint.
 - Include exactly 3 adaptive tips, 3 confusion hotspots, and 3 check-in questions.
+- If performance signals show hesitation, wrong answers, or missing concepts, explicitly target those weak areas in the explanation, hints, flashcards, and adaptive tips.
+- If generation mode asks for fresh quiz questions or flashcards, make them new and not reworded duplicates.
+- ${generationModeNotes[learner.generationMode] || generationModeNotes.lesson}
 
 Return JSON with this exact shape:
 {
@@ -410,6 +433,7 @@ function normalizeLesson(rawLesson, { topic, customTopic, learner }) {
     adaptiveTips: ensureTextArray(rawLesson?.adaptiveTips, 3, "Pause after each stage and explain it back in one sentence."),
     confusionHotspots: ensureTextArray(rawLesson?.confusionHotspots, 3, `Learners often remember the name of ${subject} before they understand the mechanism.`),
     checkInQuestions: ensureTextArray(rawLesson?.checkInQuestions, 3, `What is the main job of ${subject}?`),
+    performanceSignals: rawLesson?.performanceSignals || learner.performanceSignals || {},
   };
 }
 
@@ -887,5 +911,6 @@ function mergeUiCopy(copy) {
     },
   };
 }
+
 
 

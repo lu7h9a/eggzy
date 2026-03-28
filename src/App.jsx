@@ -32,6 +32,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [lessonPhase, setLessonPhase] = useState("explanation");
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [understood, setUnderstood] = useState(true);
   const [learnerExplanation, setLearnerExplanation] = useState("");
   const [confusionArea, setConfusionArea] = useState("");
@@ -62,8 +64,10 @@ export default function App() {
     setActiveCardIndex(0);
     setFlashcardFlipped(false);
     setQuizAnswers({});
+    setQuizSubmitted(false);
     setSlowQuestions([]);
     setHoverInsight("");
+    setLessonPhase("explanation");
   }, [lesson]);
 
   useEffect(() => {
@@ -115,7 +119,24 @@ export default function App() {
     }
   }
 
-  async function handleExplain() {
+  function buildPerformanceSignals() {
+    const wrongQuestions = quizItems
+      .filter((item) => quizAnswers[item.id] != null && quizAnswers[item.id] !== item.correctAnswer)
+      .map((item) => item.prompt);
+
+    return {
+      slowQuestions,
+      wrongQuestions,
+      quizScore,
+      totalQuestions: quizItems.length,
+      overlapScore: feedback?.overlapScore ?? null,
+      missedConcepts: feedback?.missedConcepts || [],
+      confusionArea,
+      learnerExplanation,
+    };
+  }
+
+  async function requestLesson({ mode = "lesson", nextPhase = "explanation", seed = `${Date.now()}`, performanceSignals = buildPerformanceSignals() } = {}) {
     if (!concept.trim()) return;
     setError("");
     setFeedback(null);
@@ -136,14 +157,18 @@ export default function App() {
           preferredStyle,
           interest: activeLevel === "child" ? interest : "",
           language: currentLanguageOption?.name || "English",
+          generationMode: mode,
+          regenerationSeed: seed,
+          performanceSignals,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate lesson");
       setSessionId(data.sessionId);
-      setLesson(enrichLesson(data.lesson, activeLevel === "child" ? interest : ""));
+      setLesson(enrichLesson(data.lesson, activeLevel === "child" ? interest : "", seed));
       setLearnerExplanation("");
       setConfusionArea("");
+      setLessonPhase(nextPhase);
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
     } catch {
       const fallbackLesson = createLocalLesson({
@@ -153,16 +178,36 @@ export default function App() {
         preferredStyle,
         interest: activeLevel === "child" ? interest : "",
         language: currentLanguageOption?.name || "English",
+        generationMode: mode,
+        performanceSignals,
+        materialSeed: seed,
       });
       setSessionId(`local-${Date.now()}`);
-      setLesson(enrichLesson(fallbackLesson, activeLevel === "child" ? interest : ""));
+      setLesson(enrichLesson(fallbackLesson, activeLevel === "child" ? interest : "", seed));
       setLearnerExplanation("");
       setConfusionArea("");
+      setLessonPhase(nextPhase);
       setError("Live API unavailable, so Eggzy switched to the built-in knowledge library.");
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleExplain() {
+    await requestLesson({ mode: "lesson", nextPhase: "explanation" });
+  }
+
+  async function handleRefreshQuiz() {
+    await requestLesson({ mode: "quiz_refresh", nextPhase: "quiz", seed: `quiz-${Date.now()}` });
+  }
+
+  async function handleRefreshFlashcards() {
+    await requestLesson({ mode: "flashcards_refresh", nextPhase: "flashcards", seed: `flash-${Date.now()}` });
+  }
+
+  async function handleReteachDifferent() {
+    await requestLesson({ mode: "reteach", nextPhase: "explanation", seed: `reteach-${Date.now()}` });
   }
 
   async function handleFeedbackSubmit() {
@@ -179,8 +224,10 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Unable to save feedback");
       setFeedback({ ...data, ...localAnalysis });
+      setLessonPhase("teachback");
     } catch {
       setFeedback(createLocalFeedback({ understood, learnerExplanation, confusionArea, lesson, interest, slowQuestions }));
+      setLessonPhase("teachback");
     } finally {
       setFeedbackLoading(false);
     }
@@ -218,6 +265,13 @@ export default function App() {
   const activeFlashcard = flashcards[activeCardIndex] || null;
   const quizItems = lesson?.quizQuestions || [];
   const quizScore = quizItems.reduce((total, item) => total + (quizAnswers[item.id] === item.correctAnswer ? 1 : 0), 0);
+  const allQuestionsAnswered = quizItems.length > 0 && quizItems.every((item) => quizAnswers[item.id] != null);
+  const quizPerfect = allQuestionsAnswered && quizScore === quizItems.length;
+  const quizNeedsRevision = quizSubmitted && allQuestionsAnswered && !quizPerfect;
+  const showRevisionHub = lessonPhase !== "explanation";
+  const showQuiz = lessonPhase === "quiz" || lessonPhase === "teachback";
+  const showFlashcards = lessonPhase === "flashcards" || lessonPhase === "teachback";
+  const showTeachBack = lessonPhase === "teachback";
 
   return (
     <div className="app-shell">
@@ -264,11 +318,12 @@ export default function App() {
         <section className="panel profile-panel">
           <div className="section-heading"><span className="eyebrow">{uiCopy.learnerSetupEyebrow}</span><h2>{uiCopy.learnerSetupTitle}</h2></div>
           <div className="grid two-up">
-            {activeLevel === "child" ? <Field label={uiCopy.interestHook}><input className="input" value={interest} onChange={(event) => setInterest(event.target.value)} placeholder="Example: cricket lover, gamer, artist" /></Field> : <div />}
             <Field label={uiCopy.language}><select className="input" value={language} onChange={(event) => setLanguage(event.target.value)}>{languageOptions.map((option) => <option key={option.code} value={option.code}>{option.nativeName} ({option.name})</option>)}</select></Field>
-            <Field label={uiCopy.learnerName}><input className="input" value={learnerName} onChange={(event) => setLearnerName(event.target.value)} placeholder={uiCopy.optional} /></Field>
             <Field label={uiCopy.currentMentalState}><select className="input" value={mood} onChange={(event) => setMood(event.target.value)}>{MOODS.map((option) => <option key={option} value={option}>{uiCopy.moods?.[option] || capitalize(option)}</option>)}</select></Field>
-            {activeLevel !== "child" ? <Field label={uiCopy.explanationStyle}><select className="input" value={preferredStyle} onChange={(event) => setPreferredStyle(event.target.value)}>{STYLES.map((option) => <option key={option} value={option}>{uiCopy.styles?.[option] || capitalize(option)}</option>)}</select></Field> : null}
+            <Field label={uiCopy.learnerName}><input className="input" value={learnerName} onChange={(event) => setLearnerName(event.target.value)} placeholder={uiCopy.optional} /></Field>
+            {activeLevel === "child"
+              ? <Field label={uiCopy.interestHook}><input className="input" value={interest} onChange={(event) => setInterest(event.target.value)} placeholder="Example: cricket lover, gamer, artist" /></Field>
+              : <Field label={uiCopy.explanationStyle}><select className="input" value={preferredStyle} onChange={(event) => setPreferredStyle(event.target.value)}>{STYLES.map((option) => <option key={option} value={option}>{uiCopy.styles?.[option] || capitalize(option)}</option>)}</select></Field>}
           </div>
         </section>
 
@@ -352,13 +407,13 @@ export default function App() {
             <section className="panel navigator-panel">
               <div className="section-heading"><span className="eyebrow">{uiCopy.lessonNavigationEyebrow}</span><h2>{uiCopy.lessonNavigationTitle}</h2></div>
               <div className="slide-shell">
-                <button className="nav-arrow" onClick={() => setActiveStageIndex((current) => Math.max(0, current - 1))} disabled={activeStageIndex === 0}>‹</button>
+                <button className="nav-arrow" onClick={() => setActiveStageIndex((current) => Math.max(0, current - 1))} disabled={activeStageIndex === 0}>ï¿½</button>
                 <div className="slide-card">
                   <div className="slide-progress">{activeStageIndex + 1} / {lesson.stages.length}</div>
                   <h3>{activeStage?.title}</h3>
                   <p>{activeStage?.body}</p>
                 </div>
-                <button className="nav-arrow" onClick={() => setActiveStageIndex((current) => Math.min(lesson.stages.length - 1, current + 1))} disabled={activeStageIndex === lesson.stages.length - 1}>›</button>
+                <button className="nav-arrow" onClick={() => setActiveStageIndex((current) => Math.min(lesson.stages.length - 1, current + 1))} disabled={activeStageIndex === lesson.stages.length - 1}>ï¿½</button>
               </div>
               <div className="progress-dots">
                 {lesson.stages.map((stage, index) => (
@@ -372,8 +427,83 @@ export default function App() {
               <article className="panel info-panel"><span className="eyebrow">{uiCopy.adaptiveCoaching}</span><div className="bullet-stack">{lesson.adaptiveTips.map((item) => <div key={item} className="bullet-card">{item}</div>)}</div></article>
             </section>
 
-            <section className="grid two-up">
-              <article className="panel info-panel flashcards-panel">
+            <section className="panel revision-entry">
+              <div className="section-heading"><span className="eyebrow">{uiCopy.nextStepEyebrow}</span><h2>{uiCopy.nextStepTitle}</h2></div>
+              <p className="support-copy">{uiCopy.revisionChoiceBody}</p>
+              <div className="action-row">
+                <button className="cta-button" onClick={() => setLessonPhase("revise")}>{uiCopy.continueToRevision}</button>
+                {lessonPhase !== "explanation" ? <button className="mini-button secondary-button" onClick={() => setLessonPhase("explanation")}>{uiCopy.backToExplanation}</button> : null}
+              </div>
+            </section>
+
+            {showRevisionHub ? (
+              <section className="panel revision-choice-panel">
+                <div className="choice-grid">
+                  <button className={`path-card ${lessonPhase === "quiz" ? "active" : ""}`} onClick={() => setLessonPhase("quiz")}>
+                    <span className="eyebrow">{uiCopy.revisionHub}</span>
+                    <strong>{uiCopy.quizChoiceTitle}</strong>
+                    <p>{uiCopy.quizChoiceBody}</p>
+                    <span className="path-cta">{uiCopy.openQuiz}</span>
+                  </button>
+                  <button className={`path-card ${lessonPhase === "flashcards" ? "active" : ""}`} onClick={() => setLessonPhase("flashcards")}>
+                    <span className="eyebrow">{uiCopy.revisionHub}</span>
+                    <strong>{uiCopy.flashcardChoiceTitle}</strong>
+                    <p>{uiCopy.flashcardChoiceBody}</p>
+                    <span className="path-cta">{uiCopy.openFlashcards}</span>
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            {showQuiz ? (
+              <section className="panel info-panel quiz-panel">
+                <div className="section-heading"><span className="eyebrow">{uiCopy.quizMode}</span><h2>{uiCopy.quizTitle}</h2></div>
+                <div className="quiz-score">{uiCopy.score}: {quizScore} / {quizItems.length}</div>
+                <div className="quiz-list">
+                  {quizItems.map((item, index) => (
+                    <div key={item.id} className="quiz-question" onMouseEnter={() => handleQuizHover(item)} onMouseLeave={() => clearQuizHover(item.id)}>
+                      <div className="quiz-question-head">
+                        <strong>Q{index + 1}. {item.prompt}</strong>
+                        {slowQuestions.includes(item.id) ? <span className="slow-chip">{uiCopy.needsReteach}</span> : null}
+                      </div>
+                      <div className="quiz-options">
+                        {item.options.map((option, optionIndex) => {
+                          const selected = quizAnswers[item.id] === optionIndex;
+                          const correct = quizSubmitted && optionIndex === item.correctAnswer;
+                          const wrong = quizSubmitted && selected && quizAnswers[item.id] !== item.correctAnswer;
+                          return (
+                            <button key={option} className={`quiz-option ${selected ? "selected" : ""} ${correct ? "correct" : ""} ${wrong ? "wrong" : ""}`} onClick={() => setQuizAnswers((current) => ({ ...current, [item.id]: optionIndex }))}>
+                              {option}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {hoverInsight ? <div className="coach-response"><span className="eyebrow">{uiCopy.hesitationTitle}</span><p>{hoverInsight}</p></div> : null}
+                <div className="action-row">
+                  <button className="cta-button" onClick={() => setQuizSubmitted(true)} disabled={!allQuestionsAnswered}>{uiCopy.quizCompleteTitle}</button>
+                  <button className="mini-button secondary-button" onClick={() => setLessonPhase("flashcards")}>{uiCopy.reviewWithFlashcards}</button>
+                  <button className="mini-button secondary-button" onClick={() => setLessonPhase("explanation")}>{uiCopy.backToExplanation}</button>
+                </div>
+                {quizSubmitted && allQuestionsAnswered ? (
+                  <div className="coach-response quiz-summary-card">
+                    <span className="eyebrow">{quizPerfect ? uiCopy.masteryReady : uiCopy.revisitBeforeTeachBack}</span>
+                    <p>{quizPerfect ? uiCopy.quizPerfectBody : uiCopy.quizRetryBody}</p>
+                    <div className="action-row">
+                      {quizPerfect ? <button className="cta-button" onClick={() => setLessonPhase("teachback")}>{uiCopy.proceedToTeachBack}</button> : null}
+                      {quizNeedsRevision ? <button className="mini-button secondary-button" onClick={() => void handleRefreshQuiz()}>{uiCopy.retryWithFreshQuiz}</button> : null}
+                      {quizNeedsRevision ? <button className="mini-button secondary-button" onClick={() => setLessonPhase("flashcards")}>{uiCopy.reviewWithFlashcards}</button> : null}
+                      {quizNeedsRevision ? <button className="mini-button secondary-button" onClick={() => void handleReteachDifferent()}>{uiCopy.reteachDifferently}</button> : null}
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+
+            {showFlashcards ? (
+              <section className="panel info-panel flashcards-panel">
                 <div className="section-heading"><span className="eyebrow">{uiCopy.flashcards}</span><h2>{uiCopy.reviseQuick}</h2></div>
                 {activeFlashcard ? (
                   <>
@@ -388,76 +518,61 @@ export default function App() {
                     </div>
                   </>
                 ) : null}
-              </article>
-
-              <article className="panel info-panel quiz-panel">
-                <div className="section-heading"><span className="eyebrow">{uiCopy.quizMode}</span><h2>{uiCopy.quizTitle}</h2></div>
-                <div className="quiz-score">{uiCopy.score}: {quizScore} / {quizItems.length}</div>
-                <div className="quiz-list">
-                  {quizItems.map((item, index) => (
-                    <div key={item.id} className="quiz-question" onMouseEnter={() => handleQuizHover(item)} onMouseLeave={() => clearQuizHover(item.id)}>
-                      <div className="quiz-question-head">
-                        <strong>Q{index + 1}. {item.prompt}</strong>
-                        {slowQuestions.includes(item.id) ? <span className="slow-chip">{uiCopy.needsReteach}</span> : null}
-                      </div>
-                      <div className="quiz-options">
-                        {item.options.map((option, optionIndex) => {
-                          const selected = quizAnswers[item.id] === optionIndex;
-                          const correct = quizAnswers[item.id] != null && optionIndex === item.correctAnswer;
-                          const wrong = selected && quizAnswers[item.id] !== item.correctAnswer;
-                          return (
-                            <button key={option} className={`quiz-option ${selected ? "selected" : ""} ${correct ? "correct" : ""} ${wrong ? "wrong" : ""}`} onClick={() => setQuizAnswers((current) => ({ ...current, [item.id]: optionIndex }))}>
-                              {option}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                <div className="action-row">
+                  <button className="cta-button" onClick={() => setLessonPhase("quiz")}>{uiCopy.continueToQuiz}</button>
+                  <button className="mini-button secondary-button" onClick={() => void handleRefreshFlashcards()}>{uiCopy.refreshFlashcards}</button>
+                  <button className="mini-button secondary-button" onClick={() => setLessonPhase("explanation")}>{uiCopy.backToExplanation}</button>
                 </div>
-                {hoverInsight ? <div className="coach-response"><span className="eyebrow">{uiCopy.hesitationTitle}</span><p>{hoverInsight}</p></div> : null}
-              </article>
-            </section>
+              </section>
+            ) : null}
 
-            <section className="panel feedback-panel">
-              <div className="section-heading"><span className="eyebrow">{uiCopy.teachTopicEyebrow}</span><h2>{uiCopy.teachTopicTitle}</h2></div>
-              <div className="grid two-up">
-                <div className="question-box">
-                  {lesson.checkInQuestions.map((question) => <div key={question} className="question-row">{question}</div>)}
-                  <div className="toggle-row">
-                    <button className={`toggle-pill ${understood ? "active" : ""}`} onClick={() => setUnderstood(true)}>{uiCopy.yesMostly}</button>
-                    <button className={`toggle-pill ${!understood ? "active danger" : ""}`} onClick={() => setUnderstood(false)}>{uiCopy.notYet}</button>
+            {showTeachBack ? (
+              <section className="panel feedback-panel">
+                <div className="section-heading"><span className="eyebrow">{uiCopy.teachTopicEyebrow}</span><h2>{uiCopy.teachTopicTitle}</h2></div>
+                <p className="support-copy">{uiCopy.teachBackNavigation}</p>
+                <div className="action-row top-gap">
+                  <button className="mini-button secondary-button" onClick={() => setLessonPhase("explanation")}>{uiCopy.backToExplanation}</button>
+                  <button className="mini-button secondary-button" onClick={() => setLessonPhase("flashcards")}>{uiCopy.openFlashcards}</button>
+                  <button className="mini-button secondary-button" onClick={() => setLessonPhase("quiz")}>{uiCopy.openQuiz}</button>
+                </div>
+                <div className="grid two-up">
+                  <div className="question-box">
+                    {lesson.checkInQuestions.map((question) => <div key={question} className="question-row">{question}</div>)}
+                    <div className="toggle-row">
+                      <button className={`toggle-pill ${understood ? "active" : ""}`} onClick={() => setUnderstood(true)}>{uiCopy.yesMostly}</button>
+                      <button className={`toggle-pill ${!understood ? "active danger" : ""}`} onClick={() => setUnderstood(false)}>{uiCopy.notYet}</button>
+                    </div>
+                    <div className="slow-summary">{uiCopy.slowQuestions}: {slowQuestions.length ? slowQuestions.length : uiCopy.noneYet}</div>
                   </div>
-                  <div className="slow-summary">{uiCopy.slowQuestions}: {slowQuestions.length ? slowQuestions.length : uiCopy.noneYet}</div>
-                </div>
-                <div>
-                  <textarea className="input textarea dark" value={learnerExplanation} onChange={(event) => setLearnerExplanation(event.target.value)} rows={8} placeholder={uiCopy.teachBackPlaceholder} />
-                  <input className="input dark" value={confusionArea} onChange={(event) => setConfusionArea(event.target.value)} placeholder={uiCopy.confusionPlaceholder} />
-                  <button className="cta-button wide" onClick={() => void handleFeedbackSubmit()} disabled={feedbackLoading}>{feedbackLoading ? uiCopy.checking : uiCopy.evaluateUnderstanding}</button>
-                </div>
-              </div>
-
-              {feedback ? (
-                <div className="teachback-grid grid two-up">
-                  <div className="coach-response"><span className="eyebrow">{uiCopy.eggzySays}</span><p>{feedback.coachingResponse}</p><small>{uiCopy.overlapScore}: {feedback.overlapScore}</small></div>
-                  <div className="panel insight-panel">
-                    <span className="eyebrow">{uiCopy.teachBackAnalysis}</span>
-                    <div className="bullet-stack">
-                      {feedback.strongPoints?.map((item) => <div key={item} className="bullet-card success-card">{uiCopy.strong}: {item}</div>)}
-                      {feedback.missedConcepts?.map((item) => <div key={item} className="bullet-card warning-card">{uiCopy.missing}: {item}</div>)}
-                      {feedback.reteachSteps?.map((item) => <div key={item} className="bullet-card">{uiCopy.reteach}: {item}</div>)}
-                    </div>
+                  <div>
+                    <textarea className="input textarea dark" value={learnerExplanation} onChange={(event) => setLearnerExplanation(event.target.value)} rows={8} placeholder={uiCopy.teachBackPlaceholder} />
+                    <input className="input dark" value={confusionArea} onChange={(event) => setConfusionArea(event.target.value)} placeholder={uiCopy.confusionPlaceholder} />
+                    <button className="cta-button wide" onClick={() => void handleFeedbackSubmit()} disabled={feedbackLoading}>{feedbackLoading ? uiCopy.checking : uiCopy.evaluateUnderstanding}</button>
                   </div>
                 </div>
-              ) : null}
 
-              {feedback?.questionBank?.length ? (
-                <div className="question-bank panel">
-                  <div className="section-heading"><span className="eyebrow">{uiCopy.reverseTeachingBank}</span><h2>{uiCopy.reverseTeachingTitle}</h2></div>
-                  <div className="bullet-stack">{feedback.questionBank.map((item) => <div key={item} className="bullet-card">{item}</div>)}</div>
-                </div>
-              ) : null}
-            </section>
+                {feedback ? (
+                  <div className="teachback-grid grid two-up">
+                    <div className="coach-response"><span className="eyebrow">{uiCopy.eggzySays}</span><p>{feedback.coachingResponse}</p><small>{uiCopy.overlapScore}: {feedback.overlapScore}</small><div className="action-row top-gap">{feedback.nextAction === "reteach" ? <button className="mini-button secondary-button" onClick={() => void handleReteachDifferent()}>{uiCopy.reteachDifferently}</button> : null}</div></div>
+                    <div className="panel insight-panel">
+                      <span className="eyebrow">{uiCopy.teachBackAnalysis}</span>
+                      <div className="bullet-stack">
+                        {feedback.strongPoints?.map((item) => <div key={item} className="bullet-card success-card">{uiCopy.strong}: {item}</div>)}
+                        {feedback.missedConcepts?.map((item) => <div key={item} className="bullet-card warning-card">{uiCopy.missing}: {item}</div>)}
+                        {feedback.reteachSteps?.map((item) => <div key={item} className="bullet-card">{uiCopy.reteach}: {item}</div>)}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {feedback?.questionBank?.length ? (
+                  <div className="question-bank panel">
+                    <div className="section-heading"><span className="eyebrow">{uiCopy.reverseTeachingBank}</span><h2>{uiCopy.reverseTeachingTitle}</h2></div>
+                    <div className="bullet-stack">{feedback.questionBank.map((item) => <div key={item} className="bullet-card">{item}</div>)}</div>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
           </div>
         ) : (
           <section className="panel library-panel">
@@ -698,20 +813,20 @@ const styles = `
 .brand-chip{width:66px;height:66px;border-radius:22px;background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);display:grid;place-items:center}.brand-title{font-size:34px;font-weight:900;line-height:1;font-family:'Schoolbell',cursive}.brand-subtitle{color:var(--muted);font-size:14px}.theme-toggle{border-radius:999px;background:var(--panel);color:var(--text);padding:12px 18px;display:flex;gap:18px;align-items:center;cursor:pointer;font-weight:800}
 .hero-copy,.hero-mascot-card,.panel{background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);border-radius:28px;padding:26px;position:relative}.hero-copy{flex:1.2;min-width:0}.hero-copy h1{margin:12px 0 14px;font-size:clamp(40px,5vw,66px);line-height:1;font-family:'Schoolbell',cursive}.hero-copy p,.slide-card p,.mode-card p,.question-box,.coach-response p,.library-card p{color:var(--muted);line-height:1.7}.hero-mascot-card{flex:.8;min-width:320px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;text-align:center}
 .mascot-badge,.pill,.eyebrow,.field-label{text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:900}.mascot-badge,.pill{background:rgba(255,255,255,.06);color:var(--text);border-radius:999px;padding:10px 14px}.pill-green{background:rgba(88,204,2,.18)}.pill-blue{background:rgba(102,169,255,.18)}.hero-stats{margin-top:24px;flex-wrap:wrap}.stat-card{min-width:120px;border-radius:24px;background:var(--panel-3);padding:18px}.stat-card strong{display:block;font-size:30px;font-weight:900}.stat-card span{color:var(--muted)}.mascot-caption{display:grid;gap:6px;margin-top:10px}.mascot-caption span{color:var(--muted);line-height:1.6}
-.panel{margin-top:22px}.section-heading{margin-bottom:18px}.section-heading h2{margin:8px 0 0;font-size:32px;font-family:'Schoolbell',cursive}.eyebrow,.field-label{color:var(--muted)}.grid.two-up{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid.three-up{grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.field-wrap{display:grid;gap:8px}
+.panel{margin-top:22px}.section-heading{margin-bottom:18px}.section-heading h2{margin:8px 0 0;font-size:32px;font-family:'Schoolbell',cursive}.support-copy{margin:0;color:var(--muted);line-height:1.7}.eyebrow,.field-label{color:var(--muted)}.grid.two-up{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid.three-up{grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.field-wrap{display:grid;gap:8px}
 .input-shell{display:flex;border:2px solid var(--line);background:var(--panel-3);border-radius:24px;overflow:hidden;transition:.2s ease}.input-shell.focused{transform:translateY(-1px);border-color:rgba(88,204,2,.45);box-shadow:0 0 0 4px rgba(88,204,2,.12)}.input,.concept-input{width:100%;border:2px solid var(--line);border-radius:20px;background:var(--panel-3);color:var(--text);padding:15px 16px;outline:none}.concept-input{border:0;border-radius:0;background:transparent;padding:19px 20px}.input::placeholder,.concept-input::placeholder,.textarea::placeholder{color:var(--muted)}.textarea{resize:vertical;min-height:120px}.dark{background:rgba(255,255,255,.05)}
-.cta-button,.mini-button,.nav-arrow,.quiz-option,.progress-dot{border:0;border-bottom:5px solid var(--lime-deep);border-radius:18px;background:var(--lime);color:#fff;padding:16px 22px;font-weight:900;cursor:pointer}.mini-button{padding:10px 14px;border-bottom-width:4px}.nav-arrow{min-width:56px;font-size:24px;padding:16px 0}.cta-button:disabled,.mini-button:disabled,.nav-arrow:disabled{cursor:not-allowed;opacity:.55}.cta-button.wide{width:100%;margin-top:14px}
+.cta-button,.mini-button,.nav-arrow,.quiz-option,.progress-dot{border:0;border-bottom:5px solid var(--lime-deep);border-radius:18px;background:var(--lime);color:#fff;padding:16px 22px;font-weight:900;cursor:pointer}.mini-button{padding:10px 14px;border-bottom-width:4px}.secondary-button{background:var(--panel-3);color:var(--text);border:2px solid var(--line);border-bottom-width:4px;border-bottom-color:rgba(255,255,255,.18)}.nav-arrow{min-width:56px;font-size:24px;padding:16px 0}.cta-button:disabled,.mini-button:disabled,.nav-arrow:disabled{cursor:not-allowed;opacity:.55}.cta-button.wide{width:100%;margin-top:14px}
 .topic-grid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px}.topic-chip{background:var(--panel-3);color:var(--text);border-radius:22px;padding:14px 16px;text-align:left;cursor:pointer}.topic-chip span{display:block;font-weight:800;margin-bottom:4px}.topic-chip small{color:var(--muted)}
 .level-grid{margin-top:22px;grid-template-columns:repeat(3,minmax(0,1fr))}.level-card{background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);color:var(--text);border-radius:26px;padding:24px;text-align:left;cursor:pointer}.level-card.active{transform:translateY(-4px)}.level-bar{width:42px;height:6px;border-radius:999px;margin-bottom:16px}.level-card strong{font-size:24px;display:block}.level-card span,.level-card p{color:var(--muted)}
 .error-banner{margin-top:18px;background:rgba(255,107,107,.14);border-radius:18px;padding:16px 18px;color:#ffdede}.lesson-stack{display:grid;gap:22px}.lesson-hero{display:flex;justify-content:space-between;gap:20px;align-items:start}.lesson-hero h2{margin:8px 0 10px;font-size:44px;font-family:'Schoolbell',cursive}.snapshot-card{min-width:220px;border-radius:24px;background:var(--panel-3);padding:18px}.snapshot-line{display:flex;justify-content:space-between;margin-top:10px;gap:12px}.snapshot-line span{color:var(--muted)}
 .tabs{flex-wrap:wrap;margin-bottom:16px}.tab{border:2px solid var(--line);background:var(--panel-3);color:var(--text);border-radius:18px;padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer}.tab.active{background:rgba(88,204,2,.14)}.tab small{color:var(--muted);display:block}.dot{width:12px;height:12px;border-radius:999px}.explanation-card{border-width:2px;border-style:solid;border-radius:26px;background:var(--panel-3);padding:24px}.explanation-card.long-form p{margin:10px 0 0;color:var(--text);line-height:2.05;font-size:18px;white-space:pre-wrap}.mode-card,.slide-card,.flashcard,.quiz-question,.insight-panel{border-radius:24px;background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);padding:22px}
 .slide-shell{align-items:stretch}.slide-card{flex:1;min-height:420px;display:flex;flex-direction:column;justify-content:center;padding:38px}.slide-card h3{font-family:'Schoolbell',cursive;font-size:52px;margin:0 0 18px}.slide-card p{font-size:22px;color:var(--text);line-height:2}.slide-progress{color:var(--sun);font-weight:900;text-transform:uppercase;letter-spacing:.14em;margin-bottom:12px}.progress-dots{flex-wrap:wrap;margin-top:14px}.progress-dot{background:var(--panel-3);border-bottom-color:rgba(255,255,255,.18);padding:10px 14px}.progress-dot.active{background:var(--lime)}
 .bullet-stack{gap:10px;margin-top:12px}.bullet-card{border-radius:18px;background:var(--panel-3);padding:14px 15px;line-height:1.6}.success-card{background:rgba(88,204,2,.14)}.warning-card{background:rgba(255,216,74,.12)}
-.flashcards-panel .flashcard{width:100%;min-height:260px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;background:var(--panel-3);color:var(--text);cursor:pointer}.flashcard-face{font-size:28px;line-height:1.6}.flashcard small{margin-top:16px;color:var(--muted)}.flashcard.flipped{border-color:rgba(255,216,74,.45)}.flashcard-nav{justify-content:space-between;margin-top:14px}
+.action-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px}.top-gap{margin-top:14px}.choice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.path-card{border:2px solid var(--line);border-radius:26px;background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);color:var(--text);padding:24px;text-align:left;cursor:pointer;transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;box-shadow:var(--shadow)}.path-card:hover,.path-card.active{transform:translateY(-4px);border-color:rgba(88,204,2,.45)}.path-card strong{display:block;font-size:28px;margin:12px 0 10px}.path-card p{margin:0;color:var(--muted);line-height:1.7}.path-cta{display:inline-flex;margin-top:18px;font-weight:900;color:var(--sun)}.flashcards-panel .flashcard{width:100%;min-height:260px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;background:var(--panel-3);color:var(--text);cursor:pointer}.flashcard-face{font-size:28px;line-height:1.6}.flashcard small{margin-top:16px;color:var(--muted)}.flashcard.flipped{border-color:rgba(255,216,74,.45)}.flashcard-nav{justify-content:space-between;margin-top:14px}
 .quiz-score{font-weight:900;color:var(--sun);margin-bottom:14px}.quiz-list{gap:14px}.quiz-question{display:grid;gap:14px}.quiz-options{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.quiz-option{background:var(--panel-3);border-bottom-color:rgba(255,255,255,.18);text-align:left}.quiz-option.selected{outline:2px solid rgba(255,255,255,.18)}.quiz-option.correct{background:rgba(88,204,2,.18);border-bottom-color:var(--lime)}.quiz-option.wrong{background:rgba(255,107,107,.16);border-bottom-color:#db5a5a}.slow-chip{background:rgba(255,216,74,.16);color:var(--sun);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800}
 .question-box{border-radius:24px;background:var(--panel-3);padding:18px}.question-row{padding:12px 0;border-bottom:1px solid var(--line);line-height:1.6}.question-row:last-child{border-bottom:0}.toggle-row{margin-top:18px;flex-wrap:wrap}.toggle-pill{border:2px solid var(--line);border-radius:999px;background:var(--panel);color:var(--text);padding:12px 16px;font-weight:800;cursor:pointer}.toggle-pill.active{background:rgba(88,204,2,.16);border-color:rgba(88,204,2,.38)}.toggle-pill.danger.active{background:rgba(255,107,107,.14);border-color:rgba(255,107,107,.35)}.slow-summary{margin-top:18px;color:var(--muted)}
-.coach-response{margin-top:20px;border-radius:24px;background:rgba(88,204,2,.12);padding:18px}.coach-response small{color:var(--muted)}.teachback-grid{margin-top:16px}.eggzy{width:260px;max-width:100%}.eggzy.compact{width:42px}
-@media (max-width:1080px){.grid.three-up,.quiz-options,.level-grid,.grid.two-up,.teachback-grid{grid-template-columns:1fr}.hero-panel,.lesson-hero,.slide-shell{flex-direction:column}.nav-arrow{width:100%}.slide-card{min-height:320px}.slide-card h3{font-size:38px}.slide-card p{font-size:18px}}
+.coach-response{margin-top:20px;border-radius:24px;background:rgba(88,204,2,.12);padding:18px}.coach-response small{color:var(--muted)}.quiz-summary-card{background:rgba(124,184,255,.12)}.teachback-grid{margin-top:16px}.eggzy{width:260px;max-width:100%}.eggzy.compact{width:42px}
+@media (max-width:1080px){.grid.three-up,.quiz-options,.level-grid,.grid.two-up,.teachback-grid,.choice-grid{grid-template-columns:1fr}.hero-panel,.lesson-hero,.slide-shell{flex-direction:column}.nav-arrow{width:100%}.slide-card{min-height:320px}.slide-card h3{font-size:38px}.slide-card p{font-size:18px}}
 @media (max-width:720px){.page-frame{width:min(100% - 20px,1240px)}.topbar{flex-direction:column;align-items:flex-start}.brand-title{font-size:28px}.hero-copy h1{font-size:42px}.cta-button{width:100%}.input-shell{flex-direction:column}.flashcard-face{font-size:22px}}
 `;
 
