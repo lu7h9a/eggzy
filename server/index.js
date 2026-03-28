@@ -332,7 +332,6 @@ async function generateLessonWithGroq({ topic, customTopic, learner }) {
     body: JSON.stringify({
       model: groqModel,
       temperature: 0.7,
-      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
@@ -357,7 +356,7 @@ async function generateLessonWithGroq({ topic, customTopic, learner }) {
     throw new Error("Groq returned no content.");
   }
 
-  return normalizeLesson(JSON.parse(text), { topic, customTopic, learner });
+  return normalizeLesson(extractJsonObject(text), { topic, customTopic, learner });
 }
 
 function buildLessonPrompt({ topic, customTopic, learner }) {
@@ -500,9 +499,29 @@ async function generateLessonWithGemini({ topic, customTopic, learner }) {
     throw new Error("Gemini returned no content.");
   }
 
-  return normalizeLesson(JSON.parse(text), { topic, customTopic, learner });
+  return normalizeLesson(extractJsonObject(text), { topic, customTopic, learner });
 }
 
+function extractJsonObject(text) {
+  const trimmed = String(text || "").trim();
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {}
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fencedMatch) {
+    return JSON.parse(fencedMatch[1].trim());
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
+  }
+
+  throw new Error("Model returned text that could not be parsed as JSON.");
+}
 function normalizeLesson(rawLesson, { topic, customTopic, learner }) {
   const subject = topic?.title || customTopic || "Custom topic";
   return {
@@ -755,18 +774,19 @@ function buildCustomLesson(customTopic, learner) {
   const tone = getMoodTone(learner.mood);
   const styleLens = getStyleLens(learner.preferredStyle);
   const levelGuide = getLevelGuide(learner.learnerLevel);
+  const domain = inferTopicDomain(subject);
 
   return {
     topic: {
       slug: null,
       title: subject,
-      category: "Custom",
-      shortSummary: `A guided explanation for ${subject}.`,
-      foundation: `${subject} becomes easier once we identify what problem it solves and what basic building blocks it depends on.`,
-      coreIdea: `${subject} can be understood by defining its main purpose, its inputs, and the outcome it produces.`,
-      howItWorks: `Start from the smallest unit of ${subject}, then connect the steps in sequence, then observe how the system behaves in a realistic situation.`,
-      realWorldExample: `Imagine using ${subject} in a classroom, project, or daily-life scenario where the result becomes visible and measurable.`,
-      summary: `${subject} is best learned by moving from purpose to process to application.`,
+      category: domain.label,
+      shortSummary: `${subject} is a ${domain.summaryLabel} that should be learned through its origin, core purpose, mechanism, and real-world use.`,
+      foundation: `${subject} belongs to the ${domain.label.toLowerCase()} space. Start by defining what ${subject} is, what problem it was created to solve, and the basic vocabulary a learner must know before going deeper.`,
+      coreIdea: `The core idea of ${subject} is to ${domain.corePurpose}. A strong explanation should identify its main components, how those components connect, and why that structure matters.`,
+      howItWorks: `Explain ${subject} from the inside out: begin with its fundamental units, then walk through the process or flow that makes it work, then describe what changes from start to finish when the system is active.`,
+      realWorldExample: `Place ${subject} inside a realistic ${domain.exampleContext} scenario. Show where a learner would actually encounter it, what inputs they would notice, what outcome they would observe, and why that example captures the concept accurately.`,
+      summary: `${subject} is easiest to retain when you remember four anchors: where it came from, what purpose it serves, how its mechanism works, and where it appears in real life.`,
     },
     learnerSnapshot: {
       level: learner.learnerLevel,
@@ -812,6 +832,39 @@ function buildCustomLesson(customTopic, learner) {
   };
 }
 
+function inferTopicDomain(subject) {
+  const lower = String(subject || "").toLowerCase();
+  if (/(processor|cpu|microcontroller|computer|algorithm|network|database|blockchain|encryption|software|programming)/.test(lower)) {
+    return {
+      label: "Technology",
+      summaryLabel: "technology concept",
+      corePurpose: "process information, coordinate logic, or manage digital systems in a structured way",
+      exampleContext: "device, app, or computing",
+    };
+  }
+  if (/(strategy|economics|market|policy|trade|finance|business|fabian)/.test(lower)) {
+    return {
+      label: "Social Science",
+      summaryLabel: "social-science idea",
+      corePurpose: "shape decisions, systems, or collective behavior over time",
+      exampleContext: "society, organization, or policy",
+    };
+  }
+  if (/(cell|atom|photosynthesis|gravity|quantum|reaction|ecosystem|biology|chemistry|physics)/.test(lower)) {
+    return {
+      label: "Science",
+      summaryLabel: "scientific concept",
+      corePurpose: "explain a natural process, relationship, or law of the physical world",
+      exampleContext: "laboratory, nature, or everyday observation",
+    };
+  }
+  return {
+    label: "General Concept",
+    summaryLabel: "general concept",
+    corePurpose: "explain an idea clearly enough that a learner can recognize it, describe it, and apply it",
+    exampleContext: "real-world",
+  };
+}
 function getMoodTone(mood) {
   const tones = {
     focused: {
@@ -972,7 +1025,6 @@ async function translateJsonWithGroq(payload, targetLanguage) {
     body: JSON.stringify({
       model: groqModel,
       temperature: 0.2,
-      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
@@ -1060,5 +1112,6 @@ function buildAuthUser(decodedToken) {
     name: decodedToken.name || decodedToken.email || null,
   };
 }
+
 
 
