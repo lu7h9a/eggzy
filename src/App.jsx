@@ -15,6 +15,8 @@ const LEVELS = [
 
 const MOODS = ["focused", "curious", "overwhelmed", "tired"];
 const STYLES = ["analogy", "story", "technical", "simple"];
+const FLASHCARD_OPTIONS = [5, 8, 10, 12];
+const QUIZ_OPTIONS = [4, 6, 8, 10];
 
 export default function App() {
   const [theme, setTheme] = useState("dark");
@@ -38,6 +40,8 @@ export default function App() {
   const [language, setLanguage] = useState("en");
   const [mood, setMood] = useState("focused");
   const [preferredStyle, setPreferredStyle] = useState("analogy");
+  const [flashcardTarget, setFlashcardTarget] = useState(5);
+  const [quizTarget, setQuizTarget] = useState(4);
   const [lesson, setLesson] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -226,13 +230,14 @@ export default function App() {
     };
   }
 
-  async function requestLesson({ mode = "lesson", nextPhase = "explanation", seed = `${Date.now()}`, performanceSignals = buildPerformanceSignals() } = {}) {
-    if (!concept.trim()) return;
+  async function requestLesson({ mode = "lesson", nextPhase = "explanation", seed = `${Date.now()}`, performanceSignals = buildPerformanceSignals(), conceptOverride = "" } = {}) {
+    const requestedConcept = (conceptOverride || concept).trim();
+    if (!requestedConcept) return;
     setError("");
     setFeedback(null);
     setLoading(true);
 
-    const matchedTopic = topics.find((topic) => topic.title.toLowerCase() === concept.trim().toLowerCase());
+    const matchedTopic = topics.find((topic) => topic.title.toLowerCase() === requestedConcept.toLowerCase());
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/explain`, {
@@ -240,7 +245,7 @@ export default function App() {
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           topicSlug: matchedTopic?.slug,
-          customTopic: matchedTopic ? "" : concept.trim(),
+          customTopic: matchedTopic ? "" : requestedConcept,
           learnerName,
           learnerLevel: activeLevel,
           mood,
@@ -249,6 +254,8 @@ export default function App() {
           language: currentLanguageOption?.name || "English",
           generationMode: mode,
           regenerationSeed: seed,
+          flashcardCount: flashcardTarget,
+          quizQuestionCount: quizTarget,
           performanceSignals,
         }),
       });
@@ -262,13 +269,15 @@ export default function App() {
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
     } catch {
       const fallbackLesson = createLocalLesson({
-        topic: matchedTopic || { title: concept.trim(), category: "Custom", shortSummary: `A guided explanation for ${concept.trim()}.` },
+        topic: matchedTopic || { title: requestedConcept, category: "Custom", shortSummary: `A guided explanation for ${requestedConcept}.` },
         learnerLevel: activeLevel,
         mood,
         preferredStyle,
         interest: activeLevel === "child" ? interest : "",
         language: currentLanguageOption?.name || "English",
         generationMode: mode,
+        flashcardCount: flashcardTarget,
+        quizQuestionCount: quizTarget,
         performanceSignals,
         materialSeed: seed,
       });
@@ -284,8 +293,8 @@ export default function App() {
     }
   }
 
-  async function handleExplain() {
-    await requestLesson({ mode: "lesson", nextPhase: "explanation" });
+  async function handleExplain(topicOverride = "") {
+    await requestLesson({ mode: "lesson", nextPhase: "explanation", conceptOverride: topicOverride });
   }
 
   async function handleRefreshQuiz() {
@@ -298,6 +307,22 @@ export default function App() {
 
   async function handleReteachDifferent() {
     await requestLesson({ mode: "reteach", nextPhase: "explanation", seed: `reteach-${Date.now()}` });
+  }
+
+  async function openQuizMode() {
+    if ((lesson?.quizQuestions?.length || 0) < quizTarget) {
+      await handleRefreshQuiz();
+      return;
+    }
+    setLessonPhase("quiz");
+  }
+
+  async function openFlashcardsMode() {
+    if ((lesson?.flashcards?.length || 0) < flashcardTarget) {
+      await handleRefreshFlashcards();
+      return;
+    }
+    setLessonPhase("flashcards");
   }
 
   async function handleFeedbackSubmit() {
@@ -348,12 +373,22 @@ export default function App() {
   })), [uiCopy]);
   const currentLanguageOption = languageOptions.find((option) => option.code === language) || languageOptions[0];
   const currentLevel = localizedLevels.find((level) => level.id === activeLevel);
-  const activeLevelText = useMemo(() => lesson?.levelExplanations?.[activeLevel] || "", [lesson, activeLevel]);
+  const activeLevelText = useMemo(() => {
+    if (!lesson) return "";
+    return [
+      lesson.levelExplanations?.[activeLevel] || "",
+      lesson.topic?.foundation || "",
+      lesson.topic?.coreIdea || "",
+      lesson.topic?.howItWorks || "",
+      lesson.topic?.realWorldExample || "",
+      lesson.topic?.summary || "",
+    ].filter(Boolean).join("\n\n");
+  }, [lesson, activeLevel]);
   const activeStage = lesson?.stages?.[activeStageIndex] || null;
   const activeExplanationLabel = activeLevel === "child" ? uiCopy.elementaryExplanation : activeLevel === "beginner" ? uiCopy.intermediateExplanation : uiCopy.advancedExplanation;
-  const flashcards = lesson?.flashcards || [];
+  const flashcards = (lesson?.flashcards || []).slice(0, flashcardTarget);
   const activeFlashcard = flashcards[activeCardIndex] || null;
-  const quizItems = lesson?.quizQuestions || [];
+  const quizItems = (lesson?.quizQuestions || []).slice(0, quizTarget);
   const quizScore = quizItems.reduce((total, item) => total + (quizAnswers[item.id] === item.correctAnswer ? 1 : 0), 0);
   const allQuestionsAnswered = quizItems.length > 0 && quizItems.every((item) => quizAnswers[item.id] != null);
   const quizPerfect = allQuestionsAnswered && quizScore === quizItems.length;
@@ -434,74 +469,55 @@ export default function App() {
           </div>
         ) : null}
 
-        <section className="hero-panel">
-          <div className="hero-copy">
+        {!lesson ? (
+          <>
+            <section className="panel profile-panel">
+              <div className="section-heading"><span className="eyebrow">{uiCopy.learnerSetupEyebrow}</span><h2>{uiCopy.learnerSetupTitle}</h2></div>
+              <section className="embedded-level-grid level-grid">
+                {localizedLevels.map((level) => (
+                  <button key={level.id} className={`level-card ${activeLevel === level.id ? "active" : ""}`} onClick={() => setActiveLevel(level.id)}>
+                    <div className="level-bar" style={{ background: level.accent }} />
+                    <strong>{level.label}</strong>
+                    <span>{level.sublabel}</span>
+                    <p>{level.description}</p>
+                  </button>
+                ))}
+              </section>
+              <div className="grid two-up">
+                <Field label={uiCopy.language}><select className="input" value={language} onChange={(event) => setLanguage(event.target.value)}>{languageOptions.map((option) => <option key={option.code} value={option.code}>{option.nativeName} ({option.name})</option>)}</select></Field>
+                <Field label={uiCopy.currentMentalState}><select className="input" value={mood} onChange={(event) => setMood(event.target.value)}>{MOODS.map((option) => <option key={option} value={option}>{uiCopy.moods?.[option] || capitalize(option)}</option>)}</select></Field>
+                <Field label={uiCopy.learnerName}><input className="input" value={learnerName} onChange={(event) => setLearnerName(event.target.value)} placeholder={uiCopy.optional} /></Field>
+                {activeLevel === "child"
+                  ? <Field label={uiCopy.interestHook}><input className="input" value={interest} onChange={(event) => setInterest(event.target.value)} placeholder="Example: cricket lover, gamer, artist" /></Field>
+                  : <Field label={uiCopy.explanationStyle}><select className="input" value={preferredStyle} onChange={(event) => setPreferredStyle(event.target.value)}>{STYLES.map((option) => <option key={option} value={option}>{uiCopy.styles?.[option] || capitalize(option)}</option>)}</select></Field>}
+              </div>
+            </section>
 
-            <h1>{uiCopy.heroTitle}</h1>
-            <p>
-              {uiCopy.heroBody}
-            </p>
-            <div className="hero-stats">
-              <StatCard value="5" label={uiCopy.heroLessons} />
-              <StatCard value="MCQ" label={uiCopy.heroQuiz} />
-              <StatCard value="Revise" label={uiCopy.heroRevise} />
-            </div>
-          </div>
-          <div className="hero-mascot-card">
-            <EggzyMascot theme={theme} />
-            <div className="mascot-caption">
-              <strong>{uiCopy.heroMascotTitle}</strong>
-              <span>{uiCopy.heroMascotBody}</span>
-            </div>
-          </div>
-        </section>
-
-        <section className="panel profile-panel">
-          <div className="section-heading"><span className="eyebrow">{uiCopy.learnerSetupEyebrow}</span><h2>{uiCopy.learnerSetupTitle}</h2></div>
-          <div className="grid two-up">
-            <Field label={uiCopy.language}><select className="input" value={language} onChange={(event) => setLanguage(event.target.value)}>{languageOptions.map((option) => <option key={option.code} value={option.code}>{option.nativeName} ({option.name})</option>)}</select></Field>
-            <Field label={uiCopy.currentMentalState}><select className="input" value={mood} onChange={(event) => setMood(event.target.value)}>{MOODS.map((option) => <option key={option} value={option}>{uiCopy.moods?.[option] || capitalize(option)}</option>)}</select></Field>
-            <Field label={uiCopy.learnerName}><input className="input" value={learnerName} onChange={(event) => setLearnerName(event.target.value)} placeholder={uiCopy.optional} /></Field>
-            {activeLevel === "child"
-              ? <Field label={uiCopy.interestHook}><input className="input" value={interest} onChange={(event) => setInterest(event.target.value)} placeholder="Example: cricket lover, gamer, artist" /></Field>
-              : <Field label={uiCopy.explanationStyle}><select className="input" value={preferredStyle} onChange={(event) => setPreferredStyle(event.target.value)}>{STYLES.map((option) => <option key={option} value={option}>{uiCopy.styles?.[option] || capitalize(option)}</option>)}</select></Field>}
-          </div>
-        </section>
-
-        <section className="panel concept-panel">
-          <div className="section-heading"><span className="eyebrow">{uiCopy.chooseConceptEyebrow}</span><h2>{uiCopy.chooseConceptTitle}</h2></div>
-          <div className={`input-shell ${inputFocused ? "focused" : ""}`}>
-            <input
-              ref={inputRef}
-              className="concept-input"
-              value={concept}
-              onChange={(event) => setConcept(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && void handleExplain()}
-              onFocus={() => setInputFocused(true)}
-              onBlur={() => setInputFocused(false)}
-              placeholder={uiCopy.conceptPlaceholder}
-            />
-            <button className="cta-button" onClick={() => void handleExplain()} disabled={!concept.trim() || loading}>{loading ? uiCopy.teaching : uiCopy.teachMe}</button>
-          </div>
-          <div className="topic-grid">
-            {topics.slice(0, 12).map((topic) => (
-              <button key={topic.slug} className="topic-chip" onClick={() => { setConcept(topic.title); inputRef.current?.focus(); }}>
-                <span>{topic.title}</span><small>{topic.category}</small>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="level-grid">
-          {localizedLevels.map((level) => (
-            <button key={level.id} className={`level-card ${activeLevel === level.id ? "active" : ""}`} onClick={() => setActiveLevel(level.id)}>
-              <div className="level-bar" style={{ background: level.accent }} />
-              <strong>{level.label}</strong>
-              <span>{level.sublabel}</span>
-              <p>{level.description}</p>
-            </button>
-          ))}
-        </section>
+            <section className="panel concept-panel">
+              <div className="section-heading"><span className="eyebrow">{uiCopy.chooseConceptEyebrow}</span><h2>{uiCopy.chooseConceptTitle}</h2></div>
+              <div className={`input-shell ${inputFocused ? "focused" : ""}`}>
+                <input
+                  ref={inputRef}
+                  className="concept-input"
+                  value={concept}
+                  onChange={(event) => setConcept(event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && void handleExplain()}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
+                  placeholder={uiCopy.conceptPlaceholder}
+                />
+                <button className="cta-button" onClick={() => void handleExplain()} disabled={!concept.trim() || loading}>{loading ? uiCopy.teaching : uiCopy.teachMe}</button>
+              </div>
+              <div className="topic-grid">
+                {topics.slice(0, 12).map((topic) => (
+                  <button key={topic.slug} className="topic-chip" onClick={() => { setConcept(topic.title); void handleExplain(topic.title); }}>
+                    <span>{topic.title}</span><small>{topic.category}</small>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </>
+        ) : null}
 
         {error ? <div className="error-banner">{error}</div> : null}
 
@@ -512,6 +528,7 @@ export default function App() {
                 <span className="eyebrow">{uiCopy.currentMission}</span>
                 <h2>{lesson.topic.title}</h2>
                 <p>{lesson.topic.shortSummary}</p>
+                <div className="action-row top-gap"><button className="mini-button secondary-button" onClick={() => { setLesson(null); setSessionId(null); setFeedback(null); setLessonPhase("explanation"); }}>{uiCopy.chooseConceptTitle}</button></div>
               </div>
               <div className="snapshot-card">
                 <span className="eyebrow">{uiCopy.learnerSnapshot}</span>
@@ -573,18 +590,20 @@ export default function App() {
             {showRevisionHub ? (
               <section className="panel revision-choice-panel">
                 <div className="choice-grid">
-                  <button className={`path-card ${lessonPhase === "quiz" ? "active" : ""}`} onClick={() => setLessonPhase("quiz")}>
+                  <div className={`path-card ${lessonPhase === "quiz" ? "active" : ""}`}>
                     <span className="eyebrow">{uiCopy.revisionHub}</span>
                     <strong>{uiCopy.quizChoiceTitle}</strong>
                     <p>{uiCopy.quizChoiceBody}</p>
-                    <span className="path-cta">{uiCopy.openQuiz}</span>
-                  </button>
-                  <button className={`path-card ${lessonPhase === "flashcards" ? "active" : ""}`} onClick={() => setLessonPhase("flashcards")}>
+                    <label className="count-picker"><span>No. of questions</span><select className="input" value={quizTarget} onChange={(event) => setQuizTarget(Number(event.target.value))}>{QUIZ_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+                    <button className="cta-button revision-open" onClick={() => void openQuizMode()}>{uiCopy.openQuiz}</button>
+                  </div>
+                  <div className={`path-card ${lessonPhase === "flashcards" ? "active" : ""}`}>
                     <span className="eyebrow">{uiCopy.revisionHub}</span>
                     <strong>{uiCopy.flashcardChoiceTitle}</strong>
                     <p>{uiCopy.flashcardChoiceBody}</p>
-                    <span className="path-cta">{uiCopy.openFlashcards}</span>
-                  </button>
+                    <label className="count-picker"><span>No. of flashcards</span><select className="input" value={flashcardTarget} onChange={(event) => setFlashcardTarget(Number(event.target.value))}>{FLASHCARD_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+                    <button className="cta-button revision-open" onClick={() => void openFlashcardsMode()}>{uiCopy.openFlashcards}</button>
+                  </div>
                 </div>
               </section>
             ) : null}
@@ -653,7 +672,7 @@ export default function App() {
                   </>
                 ) : null}
                 <div className="action-row">
-                  <button className="cta-button" onClick={() => setLessonPhase("quiz")}>{uiCopy.continueToQuiz}</button>
+                  <button className="cta-button" onClick={() => void openQuizMode()}>{uiCopy.continueToQuiz}</button>
                   <button className="mini-button secondary-button" onClick={() => void handleRefreshFlashcards()}>{uiCopy.refreshFlashcards}</button>
                   <button className="mini-button secondary-button" onClick={() => setLessonPhase("explanation")}>{uiCopy.backToExplanation}</button>
                 </div>
@@ -708,16 +727,7 @@ export default function App() {
               </section>
             ) : null}
           </div>
-        ) : (
-          <section className="panel library-panel">
-            <div className="section-heading"><span className="eyebrow">{uiCopy.starterLibraryEyebrow}</span><h2>{uiCopy.starterLibraryTitle}</h2></div>
-            <div className="grid two-up">
-              {topics.slice(0, 8).map((topic) => (
-                <article key={topic.slug} className="library-card"><small>{topic.category}</small><strong>{topic.title}</strong><p>{topic.shortSummary}</p></article>
-              ))}
-            </div>
-          </section>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -770,22 +780,29 @@ function mergeTopicDetails(shallowTopics) {
 }
 
 function enrichLesson(lesson, interest) {
+  const requestedFlashcards = lesson?.requestedCounts?.flashcards || 5;
+  const requestedQuizQuestions = lesson?.requestedCounts?.quizQuestions || 4;
   return {
     ...lesson,
-    flashcards: lesson.flashcards?.length ? lesson.flashcards : buildFlashcards(lesson),
-    quizQuestions: lesson.quizQuestions?.length ? lesson.quizQuestions : buildQuizQuestions(lesson, interest),
+    flashcards: lesson.flashcards?.length ? lesson.flashcards : buildFlashcards(lesson, requestedFlashcards),
+    quizQuestions: lesson.quizQuestions?.length ? lesson.quizQuestions : buildQuizQuestions(lesson, interest, requestedQuizQuestions),
   };
 }
 
-function buildFlashcards(lesson) {
+function buildFlashcards(lesson, count = 5) {
   const topic = lesson?.topic?.title || "the topic";
   const stages = lesson?.stages || [];
   const cards = stages.map((stage) => ({ front: `${stage.title}: what matters here?`, back: stage.body }));
-  const extras = (lesson?.confusionHotspots || []).slice(0, 2).map((item) => ({ front: `Common confusion in ${topic}`, back: item }));
-  return [...cards, ...extras];
+  const extras = (lesson?.confusionHotspots || []).slice(0, Math.max(2, count - cards.length)).map((item, index) => ({ front: `Common confusion ${index + 1} in ${topic}`, back: item }));
+  const deck = [...cards, ...extras];
+  while (deck.length < count) {
+    const stage = stages[deck.length % Math.max(stages.length, 1)] || { title: "Summary", body: lesson?.topic?.summary || `Review the main idea of ${topic}.` };
+    deck.push({ front: `${stage.title} recap ${deck.length + 1}`, back: stage.body });
+  }
+  return deck.slice(0, count);
 }
 
-function createLocalLesson({ topic, learnerLevel, mood, preferredStyle, interest, language }) {
+function createLocalLesson({ topic, learnerLevel, mood, preferredStyle, interest, language, flashcardCount = 5, quizQuestionCount = 4 }) {
   const tone = getMoodTone(mood);
   const styleLens = getStyleLens(preferredStyle);
   const levelGuide = getLevelGuide(learnerLevel);
@@ -805,6 +822,7 @@ function createLocalLesson({ topic, learnerLevel, mood, preferredStyle, interest
   return {
     topic: { slug: topic.slug || null, title, category: topic.category || "Custom", shortSummary, foundation, coreIdea, howItWorks, realWorldExample, summary },
     learnerSnapshot: { level: learnerLevel, mood, preferredStyle, interest, language },
+    requestedCounts: { flashcards: flashcardCount, quizQuestions: quizQuestionCount },
     stages: [
       { id: "foundation", title: "Foundation", body: `${levelGuide.foundationLead} ${foundation} Start by naming the problem this concept solves and why that problem matters in the real world.` },
       { id: "core", title: "Core Idea", body: `${styleLens.coreFraming} ${coreIdea} Focus on the central mechanism, then explain how the parts work together.` },
@@ -905,14 +923,31 @@ function buildQuestionBank(lesson, confusionArea, missedConcepts = [], slowPromp
   ];
 }
 
-function buildQuizQuestions(lesson, interest) {
+function buildQuizQuestions(lesson, interest, count = 4) {
   const title = lesson?.topic?.title || "the topic";
   const summary = lesson?.topic?.summary || lesson?.topic?.shortSummary || `The idea behind ${title} matters.`;
-  return [
+  const items = [
     { id: "q1", prompt: `Which choice best describes the main job of ${title}?`, options: [summary, "Only memorizing jargon", "Ignoring process", "Avoiding examples"], correctAnswer: 0, hint: `Pause here means Eggzy should reteach the purpose of ${title} before going deeper.` },
     { id: "q2", prompt: `What should come early when teaching ${title}?`, options: ["Advanced edge cases", "Foundation and purpose", "Only formulas", "Only trivia"], correctAnswer: 1, hint: `If this felt slow, revisit the foundation slide before the mechanism slide.` },
     { id: "q3", prompt: `How does Eggzy help lock in ${title}?`, options: ["Analogy, steps, and real-life example", "Only one final answer", "Skipping confusion checks", "Avoiding teach-back"], correctAnswer: 0, hint: `This checks layered understanding. Use analogy, sequence, and a real-world case tied to ${interest || "daily life"}.` },
+    { id: "q4", prompt: `Which explanation of ${title} is strongest?`, options: ["One that includes purpose, process, and a grounded example", "One with only a definition", "One with only history", "One that skips how it works"], correctAnswer: 0, hint: `A strong explanation should teach purpose, mechanism, and application together.` },
   ];
+  while (items.length < count) {
+    const index = items.length + 1;
+    items.push({
+      id: `q${index}`,
+      prompt: `What should you remember next about ${title}? (${index})`,
+      options: [
+        `The link between the idea, the process, and the result`,
+        "Only the jargon",
+        "Only the final answer",
+        "Only one memorized example",
+      ],
+      correctAnswer: 0,
+      hint: `Return to the detailed explanation and trace how the concept moves from purpose to process to outcome.`
+    });
+  }
+  return items.slice(0, count);
 }
 
 function scoreExplanation(learnerText, referenceText) {
@@ -947,7 +982,7 @@ const styles = `
 .brand-chip{width:66px;height:66px;border-radius:22px;background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);display:grid;place-items:center}.brand-title{font-size:34px;font-weight:900;line-height:1;font-family:'Schoolbell',cursive}.brand-subtitle{color:var(--muted);font-size:14px}.auth-button,.theme-toggle{border-radius:999px;background:var(--panel);color:var(--text);padding:12px 18px;display:flex;gap:18px;align-items:center;cursor:pointer;font-weight:800}.auth-button{background:var(--panel-3)}
 .hero-copy,.hero-mascot-card,.panel{background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);border-radius:28px;padding:26px;position:relative}.hero-copy{flex:1.2;min-width:0}.hero-copy h1{margin:12px 0 14px;font-size:clamp(40px,5vw,66px);line-height:1;font-family:'Schoolbell',cursive}.hero-copy p,.slide-card p,.mode-card p,.question-box,.coach-response p,.library-card p{color:var(--muted);line-height:1.7}.hero-mascot-card{flex:.8;min-width:320px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;text-align:center}
 .mascot-badge,.pill,.eyebrow,.field-label{text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:900}.mascot-badge,.pill{background:rgba(255,255,255,.06);color:var(--text);border-radius:999px;padding:10px 14px}.pill-green{background:rgba(88,204,2,.18)}.pill-blue{background:rgba(102,169,255,.18)}.hero-stats{margin-top:24px;flex-wrap:wrap}.stat-card{min-width:120px;border-radius:24px;background:var(--panel-3);padding:18px}.stat-card strong{display:block;font-size:30px;font-weight:900}.stat-card span{color:var(--muted)}.mascot-caption{display:grid;gap:6px;margin-top:10px}.mascot-caption span{color:var(--muted);line-height:1.6}
-.panel{margin-top:22px}.section-heading{margin-bottom:18px}.section-heading h2{margin:8px 0 0;font-size:32px;font-family:'Schoolbell',cursive}.support-copy{margin:0;color:var(--muted);line-height:1.7}.eyebrow,.field-label{color:var(--muted)}.grid.two-up{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid.three-up{grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.field-wrap{display:grid;gap:8px}
+.panel{margin-top:22px}.section-heading{margin-bottom:18px}.section-heading h2{margin:8px 0 0;font-size:32px;font-family:'Schoolbell',cursive}.support-copy{margin:0;color:var(--muted);line-height:1.7}.eyebrow,.field-label{color:var(--muted)}.grid.two-up{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid.three-up{grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.field-wrap{display:grid;gap:8px}.embedded-level-grid{margin-bottom:18px}.count-picker{display:grid;gap:8px;margin-top:18px}.count-picker span{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.revision-open{margin-top:18px;width:100%}
 .input-shell{display:flex;border:2px solid var(--line);background:var(--panel-3);border-radius:24px;overflow:hidden;transition:.2s ease}.input-shell.focused{transform:translateY(-1px);border-color:rgba(88,204,2,.45);box-shadow:0 0 0 4px rgba(88,204,2,.12)}.input,.concept-input{width:100%;border:2px solid var(--line);border-radius:20px;background:var(--panel-3);color:var(--text);padding:15px 16px;outline:none}.concept-input{border:0;border-radius:0;background:transparent;padding:19px 20px}.input::placeholder,.concept-input::placeholder,.textarea::placeholder{color:var(--muted)}.textarea{resize:vertical;min-height:120px}.dark{background:rgba(255,255,255,.05)}
 .cta-button,.mini-button,.nav-arrow,.quiz-option,.progress-dot{border:0;border-bottom:5px solid var(--lime-deep);border-radius:18px;background:var(--lime);color:#fff;padding:16px 22px;font-weight:900;cursor:pointer}.mini-button{padding:10px 14px;border-bottom-width:4px}.secondary-button{background:var(--panel-3);color:var(--text);border:2px solid var(--line);border-bottom-width:4px;border-bottom-color:rgba(255,255,255,.18)}.nav-arrow{min-width:56px;font-size:24px;padding:16px 0}.cta-button:disabled,.mini-button:disabled,.nav-arrow:disabled{cursor:not-allowed;opacity:.55}.cta-button.wide{width:100%;margin-top:14px}
 .topic-grid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px}.topic-chip{background:var(--panel-3);color:var(--text);border-radius:22px;padding:14px 16px;text-align:left;cursor:pointer}.topic-chip span{display:block;font-weight:800;margin-bottom:4px}.topic-chip small{color:var(--muted)}
@@ -963,6 +998,8 @@ const styles = `
 @media (max-width:1080px){.grid.three-up,.quiz-options,.level-grid,.grid.two-up,.teachback-grid,.choice-grid,.dashboard-grid{grid-template-columns:1fr}.hero-panel,.lesson-hero,.slide-shell{flex-direction:column}.nav-arrow{width:100%}.slide-card{min-height:320px}.slide-card h3{font-size:38px}.slide-card p{font-size:18px}}
 @media (max-width:720px){.page-frame{width:min(100% - 20px,1240px)}.topbar,.topbar-actions{flex-direction:column;align-items:flex-start}.brand-title{font-size:28px}.hero-copy h1{font-size:42px}.cta-button{width:100%}.input-shell{flex-direction:column}.flashcard-face{font-size:22px}}
 `;
+
+
 
 
 

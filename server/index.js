@@ -1,4 +1,4 @@
-﻿
+
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -84,6 +84,8 @@ app.post("/api/explain", async (req, res) => {
     interest = "",
     language = "English",
     generationMode = "lesson",
+    flashcardCount = 5,
+    quizQuestionCount = 4,
     performanceSignals = {},
     regenerationSeed = "",
     confusionPattern = "",
@@ -103,6 +105,8 @@ app.post("/api/explain", async (req, res) => {
     language,
     learnerName,
     generationMode,
+    flashcardCount,
+    quizQuestionCount,
     performanceSignals,
     regenerationSeed,
     confusionPattern,
@@ -361,13 +365,15 @@ Lesson rules:
 - Sound like a patient teacher, not a chatbot.
 - Use every learner detail you were given to customize the answer.
 - Include foundation, core idea, how it works, real-world example, and summary.
+- When relevant, include origin, history, inventor/founder, timeline, evolution, and why the topic became important.
 - Give as much detail as it requires to explain the topic completely, not just define it.
 - Make the explanation rich enough to genuinely teach the topic completely, not just define it.
-- Make each stage body detailed, content-rich, and roughly 90-140 words.
+- Make each stage body detailed, content-rich, and roughly 140-220 words.
+- Make the level explanation a long-form teaching narrative, not a short intro.
 - Include learning modes for analogy, stepByStep, and realLife.
 - Include level explanations for child, beginner, and expert.
-- Include 5 flashcards for revision.
-- Include 4 MCQ quiz questions with exactly 4 options each, a correctAnswer index, and a reteach hint.
+- Include exactly ${learner.flashcardCount || 5} flashcards for revision.
+- Include exactly ${learner.quizQuestionCount || 4} MCQ quiz questions with exactly 4 options each, a correctAnswer index, and a reteach hint.
 - Include exactly 3 adaptive tips, 3 confusion hotspots, and 3 check-in questions.
 - If performance signals show hesitation, wrong answers, or missing concepts, explicitly target those weak areas in the explanation, hints, flashcards, and adaptive tips.
 - If generation mode asks for fresh quiz questions or flashcards, make them new and not reworded duplicates.
@@ -498,8 +504,8 @@ function normalizeLesson(rawLesson, { topic, customTopic, learner }) {
       beginner: rawLesson?.levelExplanations?.beginner || `Explain ${subject} from zero and build up step by step.`,
       expert: rawLesson?.levelExplanations?.expert || `Explain ${subject} with deeper technical nuance and assumptions.`,
     },
-    flashcards: normalizeFlashcards(rawLesson?.flashcards, subject),
-    quizQuestions: normalizeQuizQuestions(rawLesson?.quizQuestions, subject),
+    flashcards: normalizeFlashcards(rawLesson?.flashcards, subject, learner.flashcardCount || 5),
+    quizQuestions: normalizeQuizQuestions(rawLesson?.quizQuestions, subject, learner.quizQuestionCount || 4),
     adaptiveTips: ensureTextArray(rawLesson?.adaptiveTips, 3, "Pause after each stage and explain it back in one sentence."),
     confusionHotspots: ensureTextArray(rawLesson?.confusionHotspots, 3, `Learners often remember the name of ${subject} before they understand the mechanism.`),
     checkInQuestions: ensureTextArray(rawLesson?.checkInQuestions, 3, `What is the main job of ${subject}?`),
@@ -535,7 +541,7 @@ function ensureTextArray(value, count, fallback) {
   return items.slice(0, count);
 }
 
-function normalizeFlashcards(flashcards, subject) {
+function normalizeFlashcards(flashcards, subject, count = 5) {
   const items = Array.isArray(flashcards)
     ? flashcards
         .filter((item) => item && typeof item.front === "string" && typeof item.back === "string")
@@ -551,10 +557,18 @@ function normalizeFlashcards(flashcards, subject) {
     { front: `How should you revise ${subject}?`, back: `Remember it as purpose -> parts -> process -> real-world result.` },
   ];
 
-  return items.length ? items.slice(0, 5) : fallback;
+  while (items.length < count) {
+    const base = fallback[items.length % fallback.length];
+    items.push({
+      front: `${base.front.replace(/\?$/, "")} ${items.length + 1}?`,
+      back: base.back,
+    });
+  }
+
+  return (items.length ? items : fallback).slice(0, count);
 }
 
-function normalizeQuizQuestions(quizQuestions, subject) {
+function normalizeQuizQuestions(quizQuestions, subject, count = 4) {
   const items = Array.isArray(quizQuestions)
     ? quizQuestions
         .filter((item) => item && typeof item.prompt === "string" && Array.isArray(item.options))
@@ -621,7 +635,23 @@ function normalizeQuizQuestions(quizQuestions, subject) {
     },
   ];
 
-  return items.length ? items.slice(0, 4) : fallback;
+  while (items.length < count) {
+    const index = items.length + 1;
+    items.push({
+      id: `q${index}`,
+      prompt: `Which statement helps explain ${subject} most clearly? (${index})`,
+      options: [
+        `It connects purpose, process, and outcome in ${subject}.`,
+        `It hides the mechanism behind jargon.`,
+        `It skips examples and applications.`,
+        `It avoids describing how the idea works.`,
+      ],
+      correctAnswer: 0,
+      hint: `Return to the explanation and focus on purpose, mechanism, and example before retrying.`
+    });
+  }
+
+  return (items.length ? items : fallback).slice(0, count);
 }
 
 function buildAdaptiveLesson(topic, learner) {
@@ -997,3 +1027,4 @@ function buildAuthUser(decodedToken) {
     name: decodedToken.name || decodedToken.email || null,
   };
 }
+
