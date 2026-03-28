@@ -395,6 +395,7 @@ Lesson rules:
 - Use the learner's interest only inside the child/elementary explanation and child-friendly examples. Do not weave it into intermediate or advanced explanations.
 - Sound like a patient teacher, not a chatbot.
 - Use every learner detail you were given to customize the answer.
+- If a learner name is provided, address the learner naturally by name in the main level explanations and learningModes fields. Use the name lightly and helpfully, not in every sentence.
 - Include foundation, core idea, how it works, real-world example, and summary.
 - When relevant, include origin, history, inventor/founder, timeline, evolution, and why the topic became important.
 - Give as much detail as it requires to explain the topic completely, not just define it.

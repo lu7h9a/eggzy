@@ -302,7 +302,7 @@ export default function App() {
         body: JSON.stringify({
           topicSlug: matchedTopic?.slug,
           customTopic: matchedTopic ? "" : requestedConcept,
-          learnerName,
+          learnerName: effectiveLearnerName,
           learnerLevel: activeLevel,
           mood,
           preferredStyle,
@@ -319,7 +319,7 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || "Failed to generate lesson");
       setSessionId(data.sessionId);
       setRemoteSessionId(data.remoteSessionId || null);
-      setLesson(enrichLesson(data.lesson, activeLevel === "child" ? interest : "", seed));
+      setLesson(enrichLesson(data.lesson, activeLevel === "child" ? interest : "", effectiveLearnerName));
       setLearnerExplanation("");
       setConfusionArea("");
       setLessonPhase(nextPhase);
@@ -336,11 +336,12 @@ export default function App() {
         flashcardCount: flashcardTarget,
         quizQuestionCount: quizTarget,
         performanceSignals,
+        learnerName: effectiveLearnerName,
         materialSeed: seed,
       });
       setSessionId(`local-${Date.now()}`);
       setRemoteSessionId(null);
-      setLesson(enrichLesson(fallbackLesson, activeLevel === "child" ? interest : "", seed));
+      setLesson(enrichLesson(fallbackLesson, activeLevel === "child" ? interest : "", effectiveLearnerName));
       setLearnerExplanation("");
       setConfusionArea("");
       setLessonPhase(nextPhase);
@@ -430,6 +431,7 @@ export default function App() {
     description: level.id === "child" ? uiCopy.elementaryDescription : level.id === "beginner" ? uiCopy.intermediateDescription : uiCopy.advancedDescription,
   })), [uiCopy]);
   const currentLanguageOption = languageOptions.find((option) => option.code === language) || languageOptions[0];
+  const effectiveLearnerName = authUser?.displayName || learnerName || "";
   const currentLevel = localizedLevels.find((level) => level.id === activeLevel);
   const activeLevelText = useMemo(() => {
     if (!lesson) return "";
@@ -578,7 +580,7 @@ export default function App() {
               <div className="grid two-up">
                 <Field label={uiCopy.language}><select className="input" value={language} onChange={(event) => setLanguage(event.target.value)}>{languageOptions.map((option) => <option key={option.code} value={option.code}>{option.nativeName} ({option.name})</option>)}</select></Field>
                 <Field label={uiCopy.currentMentalState}><select className="input" value={mood} onChange={(event) => setMood(event.target.value)}>{MOODS.map((option) => <option key={option} value={option}>{uiCopy.moods?.[option] || capitalize(option)}</option>)}</select></Field>
-                <Field label={uiCopy.learnerName}><input className="input" value={learnerName} onChange={(event) => setLearnerName(event.target.value)} placeholder={uiCopy.optional} /></Field>
+                <Field label={uiCopy.learnerName}><div className="input dark read-only-field">{effectiveLearnerName || "Login to let Eggzy teach using your username."}</div></Field>
                 {activeLevel === "child"
                   ? <Field label={uiCopy.interestHook}><input className="input" value={interest} onChange={(event) => setInterest(event.target.value)} placeholder="Example: cricket lover, gamer, artist" /></Field>
                   : <Field label={uiCopy.explanationStyle}><select className="input" value={preferredStyle} onChange={(event) => setPreferredStyle(event.target.value)}>{STYLES.map((option) => <option key={option} value={option}>{uiCopy.styles?.[option] || capitalize(option)}</option>)}</select></Field>}
@@ -871,14 +873,29 @@ function mergeTopicDetails(shallowTopics) {
   return shallowTopics.map((topic) => DEFAULT_TOPICS.find((item) => item.slug === topic.slug) || topic);
 }
 
-function enrichLesson(lesson, interest) {
+function enrichLesson(lesson, interest, learnerName = "") {
   const requestedFlashcards = lesson?.requestedCounts?.flashcards || 5;
   const requestedQuizQuestions = lesson?.requestedCounts?.quizQuestions || 4;
+  const name = learnerName.trim();
   return {
     ...lesson,
+    learnerSnapshot: { ...(lesson.learnerSnapshot || {}), learnerName: name || lesson?.learnerSnapshot?.learnerName || "" },
+    learningModes: personalizeNarratives(lesson.learningModes || {}, name),
+    levelExplanations: personalizeNarratives(lesson.levelExplanations || {}, name),
     flashcards: lesson.flashcards?.length ? lesson.flashcards : buildFlashcards(lesson, requestedFlashcards),
     quizQuestions: lesson.quizQuestions?.length ? lesson.quizQuestions : buildQuizQuestions(lesson, interest, requestedQuizQuestions),
   };
+}
+
+function personalizeNarratives(map, learnerName) {
+  if (!learnerName) return map;
+  return Object.fromEntries(Object.entries(map).map(([key, value]) => [key, personalizeText(value, learnerName)]));
+}
+
+function personalizeText(text, learnerName) {
+  if (!learnerName || !text) return text;
+  if (String(text).toLowerCase().includes(learnerName.toLowerCase())) return text;
+  return `${learnerName}, ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
 }
 
 function buildFlashcards(lesson, count = 5) {
@@ -894,7 +911,7 @@ function buildFlashcards(lesson, count = 5) {
   return deck.slice(0, count);
 }
 
-function createLocalLesson({ topic, learnerLevel, mood, preferredStyle, interest, language, flashcardCount = 5, quizQuestionCount = 4 }) {
+function createLocalLesson({ topic, learnerLevel, mood, preferredStyle, interest, language, learnerName = "", flashcardCount = 5, quizQuestionCount = 4 }) {
   const tone = getMoodTone(mood);
   const styleLens = getStyleLens(preferredStyle);
   const levelGuide = getLevelGuide(learnerLevel);
@@ -913,7 +930,7 @@ function createLocalLesson({ topic, learnerLevel, mood, preferredStyle, interest
 
   return {
     topic: { slug: topic.slug || null, title, category: topic.category || "Custom", shortSummary, foundation, coreIdea, howItWorks, realWorldExample, summary },
-    learnerSnapshot: { level: learnerLevel, mood, preferredStyle, interest, language },
+    learnerSnapshot: { level: learnerLevel, mood, preferredStyle, interest, language, learnerName },
     requestedCounts: { flashcards: flashcardCount, quizQuestions: quizQuestionCount },
     stages: [
       { id: "foundation", title: "Foundation", body: `${levelGuide.foundationLead} ${foundation} Start by naming the problem this concept solves and why that problem matters in the real world.` },
@@ -1075,7 +1092,7 @@ const styles = `
 .hero-copy,.hero-mascot-card,.panel{background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);border-radius:28px;padding:26px;position:relative}.hero-copy{flex:1.2;min-width:0}.hero-copy h1{margin:12px 0 14px;font-size:clamp(40px,5vw,66px);line-height:1;font-family:'Schoolbell',cursive}.hero-copy p,.slide-card p,.mode-card p,.question-box,.coach-response p,.library-card p{color:var(--muted);line-height:1.7}.hero-mascot-card{flex:.8;min-width:320px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;text-align:center}
 .mascot-badge,.pill,.eyebrow,.field-label{text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:900}.mascot-badge,.pill{background:rgba(255,255,255,.06);color:var(--text);border-radius:999px;padding:10px 14px}.pill-green{background:rgba(88,204,2,.18)}.pill-blue{background:rgba(102,169,255,.18)}.hero-stats{margin-top:24px;flex-wrap:wrap}.stat-card{min-width:120px;border-radius:24px;background:var(--panel-3);padding:18px}.stat-card strong{display:block;font-size:30px;font-weight:900}.stat-card span{color:var(--muted)}.mascot-caption{display:grid;gap:6px;margin-top:10px}.mascot-caption span{color:var(--muted);line-height:1.6}
 .panel{margin-top:22px}.section-heading{margin-bottom:18px}.section-heading h2{margin:8px 0 0;font-size:32px;font-family:'Schoolbell',cursive}.support-copy{margin:0;color:var(--muted);line-height:1.7}.eyebrow,.field-label{color:var(--muted)}.grid.two-up{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid.three-up{grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.field-wrap{display:grid;gap:8px}.embedded-level-grid{margin-bottom:18px}.count-picker{display:grid;gap:8px;margin-top:18px}.count-picker span{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.revision-open{margin-top:18px;width:100%}
-.input-shell{display:flex;border:2px solid var(--line);background:var(--panel-3);border-radius:24px;overflow:hidden;transition:.2s ease}.input-shell.focused{transform:translateY(-1px);border-color:rgba(88,204,2,.45);box-shadow:0 0 0 4px rgba(88,204,2,.12)}.input,.concept-input{width:100%;border:2px solid var(--line);border-radius:20px;background:var(--panel-3);color:var(--text);padding:15px 16px;outline:none}.concept-input{border:0;border-radius:0;background:transparent;padding:19px 20px}.input::placeholder,.concept-input::placeholder,.textarea::placeholder{color:var(--muted)}.textarea{resize:vertical;min-height:120px}.dark{background:rgba(255,255,255,.05)}
+.input-shell{display:flex;border:2px solid var(--line);background:var(--panel-3);border-radius:24px;overflow:hidden;transition:.2s ease}.input-shell.focused{transform:translateY(-1px);border-color:rgba(88,204,2,.45);box-shadow:0 0 0 4px rgba(88,204,2,.12)}.input,.concept-input{width:100%;border:2px solid var(--line);border-radius:20px;background:var(--panel-3);color:var(--text);padding:15px 16px;outline:none}.read-only-field{display:flex;align-items:center;min-height:56px}.concept-input{border:0;border-radius:0;background:transparent;padding:19px 20px}.input::placeholder,.concept-input::placeholder,.textarea::placeholder{color:var(--muted)}.textarea{resize:vertical;min-height:120px}.dark{background:rgba(255,255,255,.05)}
 .cta-button,.mini-button,.nav-arrow,.quiz-option,.progress-dot{border:0;border-bottom:5px solid var(--lime-deep);border-radius:18px;background:var(--lime);color:#fff;padding:16px 22px;font-weight:900;cursor:pointer}.mini-button{padding:10px 14px;border-bottom-width:4px}.secondary-button{background:var(--panel-3);color:var(--text);border:2px solid var(--line);border-bottom-width:4px;border-bottom-color:rgba(255,255,255,.18)}.nav-arrow{min-width:56px;font-size:24px;padding:16px 0}.cta-button:disabled,.mini-button:disabled,.nav-arrow:disabled{cursor:not-allowed;opacity:.55}.cta-button.wide{width:100%;margin-top:14px}
 .topic-grid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px}.topic-chip{background:var(--panel-3);color:var(--text);border-radius:22px;padding:14px 16px;text-align:left;cursor:pointer}.topic-chip span{display:block;font-weight:800;margin-bottom:4px}.topic-chip small{color:var(--muted)}
 .level-grid{margin-top:22px;grid-template-columns:repeat(3,minmax(0,1fr))}.level-card{background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel) 100%);color:var(--text);border-radius:26px;padding:24px;text-align:left;cursor:pointer}.level-card.active{transform:translateY(-4px)}.level-bar{width:42px;height:6px;border-radius:999px;margin-bottom:16px}.level-card strong{font-size:24px;display:block}.level-card span,.level-card p{color:var(--muted)}
