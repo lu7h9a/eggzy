@@ -856,14 +856,14 @@ export default function App() {
                     <span className="eyebrow">{uiCopy.revisionHub}</span>
                     <strong>{uiCopy.quizChoiceTitle}</strong>
                     <p>{uiCopy.quizChoiceBody}</p>
-                    <label className="count-picker"><span>No. of questions</span><select className="input" value={quizTarget} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onChange={(event) => { event.stopPropagation(); setQuizTarget(Number(event.target.value)); }}>{QUIZ_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+                    <label className="count-picker"><span>No. of questions</span><select className="input" value={quizTarget} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onChange={(event) => { event.stopPropagation(); const nextCount = Number(event.target.value); setQuizTarget(nextCount); if (lesson && lessonPhase !== "explanation") { void openQuizMode(nextCount); } }}>{QUIZ_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
                     <button type="button" className="cta-button revision-open" onClick={() => void openQuizMode()}>{uiCopy.openQuiz}</button>
                   </div>
                   <div className={`path-card ${lessonPhase === "flashcards" ? "active" : ""}`}>
                     <span className="eyebrow">{uiCopy.revisionHub}</span>
                     <strong>{uiCopy.flashcardChoiceTitle}</strong>
                     <p>{uiCopy.flashcardChoiceBody}</p>
-                    <label className="count-picker"><span>No. of flashcards</span><select className="input" value={flashcardTarget} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onChange={(event) => { event.stopPropagation(); setFlashcardTarget(Number(event.target.value)); }}>{FLASHCARD_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+                    <label className="count-picker"><span>No. of flashcards</span><select className="input" value={flashcardTarget} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onChange={(event) => { event.stopPropagation(); const nextCount = Number(event.target.value); setFlashcardTarget(nextCount); if (lesson && lessonPhase !== "explanation") { void openFlashcardsMode(nextCount); } }}>{FLASHCARD_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
                     <button type="button" className="cta-button revision-open" onClick={() => void openFlashcardsMode()}>{uiCopy.openFlashcards}</button>
                   </div>
                 </div>
