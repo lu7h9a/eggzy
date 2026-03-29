@@ -394,7 +394,7 @@ export default function App() {
     };
   }
 
-  async function requestLesson({ mode = "lesson", nextPhase = "explanation", seed = `${Date.now()}`, performanceSignals = buildPerformanceSignals(), conceptOverride = "" } = {}) {
+  async function requestLesson({ mode = "lesson", nextPhase = "explanation", seed = `${Date.now()}`, performanceSignals = buildPerformanceSignals(), conceptOverride = "", quizCountOverride = quizTarget, flashcardCountOverride = flashcardTarget } = {}) {
     const requestedConcept = (conceptOverride || concept || lesson?.topic?.title || "").trim();
     if (!requestedConcept) return;
     setError("");
@@ -464,30 +464,29 @@ export default function App() {
   async function handleExplain(topicOverride = "") {
     await requestLesson({ mode: "lesson", nextPhase: "explanation", conceptOverride: topicOverride });
   }
-
-  async function handleRefreshQuiz() {
-    await requestLesson({ mode: "quiz_refresh", nextPhase: "quiz", seed: `quiz-${Date.now()}` });
+  async function handleRefreshQuiz(targetCount = quizTarget) {
+    await requestLesson({ mode: "quiz_refresh", nextPhase: "quiz", seed: `quiz-${Date.now()}`, quizCountOverride: targetCount });
   }
 
-  async function handleRefreshFlashcards() {
-    await requestLesson({ mode: "flashcards_refresh", nextPhase: "flashcards", seed: `flash-${Date.now()}` });
+  async function handleRefreshFlashcards(targetCount = flashcardTarget) {
+    await requestLesson({ mode: "flashcards_refresh", nextPhase: "flashcards", seed: `flash-${Date.now()}`, flashcardCountOverride: targetCount });
   }
 
   async function handleReteachDifferent() {
     await requestLesson({ mode: "reteach", nextPhase: "explanation", seed: `reteach-${Date.now()}` });
   }
 
-  async function openQuizMode() {
-    if ((lesson?.quizQuestions?.length || 0) < quizTarget) {
-      await handleRefreshQuiz();
+  async function openQuizMode(targetCount = quizTarget) {
+    if ((lesson?.quizQuestions?.length || 0) < targetCount) {
+      await handleRefreshQuiz(targetCount);
       return;
     }
     setLessonPhase("quiz");
   }
 
-  async function openFlashcardsMode() {
-    if ((lesson?.flashcards?.length || 0) < flashcardTarget) {
-      await handleRefreshFlashcards();
+  async function openFlashcardsMode(targetCount = flashcardTarget) {
+    if ((lesson?.flashcards?.length || 0) < targetCount) {
+      await handleRefreshFlashcards(targetCount);
       return;
     }
     setLessonPhase("flashcards");
@@ -604,6 +603,9 @@ export default function App() {
     { value: dashboardData?.weakAreasFlagged ?? dashboardData?.weakTopics?.length ?? 0, label: uiCopy.weakAreasFlagged },
     { value: `${dashboardData?.timeLearningMinutes ?? 47}m`, label: uiCopy.timeLearning },
   ];
+  const learnerSnapshot = lesson?.learnerSnapshot || {};
+  const learningModes = lesson?.learningModes || { analogy: "", stepByStep: "", realLife: "" };
+  const checkInQuestions = Array.isArray(lesson?.checkInQuestions) && lesson.checkInQuestions.length ? lesson.checkInQuestions : ["What is the main idea in your own words?", "Which part still feels fuzzy?", "What example would you use to teach it?"];
   const activeStages = getLessonStagesForLevel(lesson, activeLevel);
   const activeLevelText = lesson?.levelExplanations?.[activeLevel] || "";
   const activeStage = activeStages[activeStageIndex] || null;
@@ -802,10 +804,10 @@ export default function App() {
                 <strong className="snapshot-name">{effectiveLearnerName || authUser?.displayName || "Learner"}</strong>
                 <span className="eyebrow">{uiCopy.learnerSnapshot}</span>
                 <div className="snapshot-line"><span>{uiCopy.level}</span><strong>{currentLevel?.label || capitalize(activeLevel)}</strong></div>
-                <div className="snapshot-line"><span>{uiCopy.mood}</span><strong>{uiCopy.moods?.[lesson.learnerSnapshot.mood] || capitalize(lesson.learnerSnapshot.mood)}</strong></div>
-                {activeLevel !== "child" ? <div className="snapshot-line"><span>{uiCopy.style}</span><strong>{uiCopy.styles?.[lesson.learnerSnapshot.preferredStyle] || capitalize(lesson.learnerSnapshot.preferredStyle)}</strong></div> : null}
-                <div className="snapshot-line"><span>{uiCopy.language}</span><strong>{lesson.learnerSnapshot.language || "English"}</strong></div>
-                {activeLevel === "child" ? <div className="snapshot-line"><span>{uiCopy.interest}</span><strong>{lesson.learnerSnapshot.interest || "General"}</strong></div> : null}
+                <div className="snapshot-line"><span>{uiCopy.mood}</span><strong>{uiCopy.moods?.[learnerSnapshot.mood] || capitalize(learnerSnapshot.mood)}</strong></div>
+                {activeLevel !== "child" ? <div className="snapshot-line"><span>{uiCopy.style}</span><strong>{uiCopy.styles?.[learnerSnapshot.preferredStyle] || capitalize(learnerSnapshot.preferredStyle)}</strong></div> : null}
+                <div className="snapshot-line"><span>{uiCopy.language}</span><strong>{learnerSnapshot.language || "English"}</strong></div>
+                {activeLevel === "child" ? <div className="snapshot-line"><span>{uiCopy.interest}</span><strong>{learnerSnapshot.interest || "General"}</strong></div> : null}
               </section>
             </section>
 
@@ -826,9 +828,9 @@ export default function App() {
                   </div>
                   {activeLevel !== "child" ? (
                     <div className="learning-modes grid three-up polished-lenses">
-                      <ModeCard title={uiCopy.analogyLens} body={lesson.learningModes.analogy} />
-                      <ModeCard title={uiCopy.stepByStepLens} body={lesson.learningModes.stepByStep} />
-                      <ModeCard title={uiCopy.realLifeLens} body={lesson.learningModes.realLife} />
+                      <ModeCard title={uiCopy.analogyLens} body={learningModes.analogy} />
+                      <ModeCard title={uiCopy.stepByStepLens} body={learningModes.stepByStep} />
+                      <ModeCard title={uiCopy.realLifeLens} body={learningModes.realLife} />
                     </div>
                   ) : null}
                 </section>
@@ -960,7 +962,7 @@ export default function App() {
                 </div>
                 <div className="grid two-up">
                   <div className="question-box">
-                    {lesson.checkInQuestions.map((question) => <div key={question} className="question-row">{question}</div>)}
+                    {checkInQuestions.map((question) => <div key={question} className="question-row">{question}</div>)}
                     <div className="toggle-row">
                       <button className={`toggle-pill ${understood ? "active" : ""}`} onClick={() => setUnderstood(true)}>{uiCopy.yesMostly}</button>
                       <button className={`toggle-pill ${!understood ? "active danger" : ""}`} onClick={() => setUnderstood(false)}>{uiCopy.notYet}</button>
