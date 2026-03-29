@@ -1005,6 +1005,63 @@ export default function App() {
   );
 }
 
+function StarfieldCanvas({ theme }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+
+    const context = canvas.getContext("2d");
+    if (!context) return undefined;
+
+    let animationFrame = 0;
+    let stars = [];
+
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      stars = Array.from({ length: Math.max(36, Math.floor((width * height) / 18000)) }, () => ({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        r: Math.random() * 1.8 + 0.6,
+        phase: Math.random() * Math.PI * 2,
+        speed: Math.random() * 0.02 + 0.004,
+      }));
+    };
+
+    const draw = (time) => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      context.clearRect(0, 0, width, height);
+      for (const star of stars) {
+        const glow = 0.45 + (Math.sin(time * star.speed + star.phase) + 1) / 4;
+        context.beginPath();
+        context.fillStyle = theme === "dark" ? `rgba(112, 255, 167, ${glow})` : `rgba(76, 154, 78, ${glow * 0.8})`;
+        context.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+        context.fill();
+      }
+      animationFrame = window.requestAnimationFrame(draw);
+    };
+
+    resize();
+    animationFrame = window.requestAnimationFrame(draw);
+    window.addEventListener("resize", resize);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("resize", resize);
+    };
+  }, [theme]);
+
+  return <canvas ref={canvasRef} className="starfield-canvas" aria-hidden="true" />;
+}
 function EggzyMascot({ theme, compact = false }) {
   const shellStroke = theme === "dark" ? "#d6e2da" : "#31415c";
   const shellFill = theme === "dark" ? "#fffef7" : "#fffdfa";
