@@ -597,6 +597,13 @@ export default function App() {
   const currentLanguageOption = languageOptions.find((option) => option.code === language) || languageOptions[0];
   const effectiveLearnerName = authUser?.displayName || learnerName || "";
   const currentLevel = localizedLevels.find((level) => level.id === activeLevel);
+  const streakDays = dashboardData?.streakDays ?? 7;
+  const quickStats = [
+    { value: dashboardData?.topicsLearned ?? historyData.length ?? 0, label: uiCopy.topicsLearned },
+    { value: `${dashboardData?.teachBackAverage ?? 84}%`, label: uiCopy.avgTeachBackScore },
+    { value: dashboardData?.weakAreasFlagged ?? dashboardData?.weakTopics?.length ?? 0, label: uiCopy.weakAreasFlagged },
+    { value: `${dashboardData?.timeLearningMinutes ?? 47}m`, label: uiCopy.timeLearning },
+  ];
   const activeStages = getLessonStagesForLevel(lesson, activeLevel);
   const activeLevelText = lesson?.levelExplanations?.[activeLevel] || "";
   const activeStage = activeStages[activeStageIndex] || null;
