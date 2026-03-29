@@ -73,6 +73,7 @@ export default function App() {
   const previousLanguageRef = useRef("en");
   const popupDismissedRef = useRef(false);
 
+  const nextLessonPhaseRef = useRef("explanation");
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
@@ -105,7 +106,8 @@ export default function App() {
     setQuizSubmitted(false);
     setSlowQuestions([]);
     setHoverInsight("");
-    setLessonPhase("explanation");
+    setLessonPhase(nextLessonPhaseRef.current || "explanation");
+    nextLessonPhaseRef.current = "explanation";
   }, [lesson]);
 
   useEffect(() => {
@@ -293,7 +295,7 @@ export default function App() {
   }
 
   async function requestLesson({ mode = "lesson", nextPhase = "explanation", seed = `${Date.now()}`, performanceSignals = buildPerformanceSignals(), conceptOverride = "" } = {}) {
-    const requestedConcept = (conceptOverride || concept).trim();
+    const requestedConcept = (conceptOverride || concept || lesson?.topic?.title || "").trim();
     if (!requestedConcept) return;
     setError("");
     setFeedback(null);
@@ -323,12 +325,13 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate lesson");
+      nextLessonPhaseRef.current = nextPhase;
       setSessionId(data.sessionId);
       setRemoteSessionId(data.remoteSessionId || null);
       setLesson(enrichLesson(data.lesson, activeLevel === "child" ? interest : "", effectiveLearnerName));
       setLearnerExplanation("");
-      setConfusionArea("");
       setLessonPhase(nextPhase);
+      setConfusionArea("");
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
     } catch {
       const fallbackLesson = createLocalLesson({
@@ -345,12 +348,12 @@ export default function App() {
         learnerName: effectiveLearnerName,
         materialSeed: seed,
       });
+      nextLessonPhaseRef.current = nextPhase;
       setSessionId(`local-${Date.now()}`);
       setRemoteSessionId(null);
       setLesson(enrichLesson(fallbackLesson, activeLevel === "child" ? interest : "", effectiveLearnerName));
       setLearnerExplanation("");
       setConfusionArea("");
-      setLessonPhase(nextPhase);
       setError("Live API unavailable, so Eggzy switched to the built-in knowledge library.");
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
     } finally {
