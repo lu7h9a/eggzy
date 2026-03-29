@@ -16,8 +16,26 @@ const groqApiKey = process.env.GROQ_API_KEY || "";
 const groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 const uiCopyCache = new Map();
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://eggzy.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+  ],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
 app.use(express.json());
+
+app.get("/", (_req, res) => {
+  res.json({ status: "ok", service: "Eggzy API", version: "1.0" });
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString(), seededTopics: listTopics(db).length, aiProvider: getAiProvider(), authenticated: Boolean(req.user) });
+});
+
 app.use(async (req, _res, next) => {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
@@ -323,25 +341,25 @@ function buildTeachbackFeedbackPrompt({ lesson, understood, learnerExplanation, 
   return `
 You are Eggzy, an adaptive AI teacher. Return only valid JSON.
 
-Analyze this learner teach-back and decide what they still need to learn.
+A learner was just taught about: ${lesson?.topic?.title || "Unknown topic"}
 
-Lesson topic: ${lesson?.topic?.title || "Unknown topic"}
-Learner level: ${lesson?.learnerSnapshot?.learnerLevel || "beginner"}
-Learner mood: ${lesson?.learnerSnapshot?.mood || "focused"}
-Learner language: ${lesson?.learnerSnapshot?.language || "English"}
-Learner interest: ${lesson?.learnerSnapshot?.interest || "general"}
-Learner says they understood: ${understood ? "yes" : "no"}
-Confusion area: ${confusionArea || "none"}
+The learner wrote this explanation in their own words:
+"${learnerExplanation || ""}"
+
+Learner profile:
+- level: ${lesson?.learnerSnapshot?.learnerLevel || "beginner"}
+- mood: ${lesson?.learnerSnapshot?.mood || "focused"}
+- language: ${lesson?.learnerSnapshot?.language || "English"}
+- interest: ${lesson?.learnerSnapshot?.interest || "general"}
+- learner thinks they understood: ${understood ? "yes" : "no"}
+- confusion area: ${confusionArea || "none"}
 
 Lesson summary:
 ${lesson?.topic?.summary || ""}
 
-Core explanation:
+Core explanation context:
 ${lesson?.topic?.coreIdea || ""}
 ${lesson?.topic?.howItWorks || ""}
-
-Teach-back paragraph:
-${learnerExplanation || "none"}
 
 Performance signals:
 ${formatPerformanceSignals(performanceSignals)}
@@ -349,27 +367,32 @@ ${formatPerformanceSignals(performanceSignals)}
 Prior learner history:
 ${formatHistoryContext(historyContext)}
 
-Return JSON with exactly these keys:
+Analyze this carefully and return ONLY valid JSON with these keys:
 {
-  "overlapScore": number between 0 and 1,
-  "coachingResponse": string,
-  "nextAction": "advance" or "reteach",
-  "strongPoints": string[],
-  "missedConcepts": string[],
-  "reteachSteps": string[],
-  "questionBank": string[]
+  "score": <0-100 integer>,
+  "overlapScore": <0-1 number>,
+  "strongPoints": ["specific thing they got right"],
+  "missedConcepts": ["specific concept they skipped or got wrong"],
+  "reteachSteps": ["one targeted thing to re-explain"],
+  "followUpQuestions": ["a question targeting their weakest gap"],
+  "questionBank": ["a question targeting their weakest gap"],
+  "encouragement": "one sentence of specific praise",
+  "coachingResponse": "one specific coaching message",
+  "nextAction": "advance" or "reteach"
 }
 
 Rules:
-- Use the learner explanation and performance signals to identify what is missing.
-- Generate 3 to 5 strong points, 3 to 5 missed concepts, 3 to 5 reteach steps, and 4 to 6 question-bank prompts.
-- The question bank should focus on what the learner still needs to learn, not generic revision.
-- The coaching response should clearly tell the learner what they did well, what they missed, and what to focus on next.
-- If the learner is weak, set nextAction to "reteach" and emphasize the missing parts that should be highlighted in the next explanation.
-- If the learner is strong, set nextAction to "advance" but still note any small gaps.
+- Be specific. Reference exact phrases or missing ideas from what the learner wrote.
+- Do not be vague or generic.
+- Do not say "good effort" without saying what was actually good.
+- If the learner missed something important, make it explicit.
+- If they are weak, set nextAction to "reteach".
+- If they are strong, set nextAction to "advance" but still mention any small gap.
+- The followUpQuestions and questionBank should focus on what they still need to learn.
 - Keep everything in ${lesson?.learnerSnapshot?.language || "English"}.
-`;
+`.trim();
 }
+
 
 function buildLocalTeachbackFeedback({ lesson, understood, learnerExplanation, confusionArea, performanceSignals = {} }) {
   const referenceText = `${lesson?.topic?.summary || ""} ${lesson?.topic?.coreIdea || ""} ${lesson?.topic?.howItWorks || ""}`;
@@ -485,6 +508,7 @@ async function generateLessonWithGroq({ topic, customTopic, learner }) {
 
 function buildLessonPrompt({ topic, customTopic, learner }) {
   const subject = topic?.title || customTopic;
+  const weakTopics = (learner.historyContext?.weakTopics || []).map((item) => item.topic || item).filter(Boolean);
   const generationModeNotes = {
     lesson: "Give the full best teaching experience from explanation through revision.",
     quiz_refresh: "Keep the lesson coherent, but prioritize generating a fresh set of quiz questions that are meaningfully different from before.",
@@ -493,35 +517,47 @@ function buildLessonPrompt({ topic, customTopic, learner }) {
   };
 
   return `
-You are Eggzy, an adaptive AI teacher. Return only valid JSON.
+You are Eggzy, a dedicated adaptive AI teacher. Your only job is to teach this specific topic to this specific learner. Never give a generic textbook answer. Return only valid JSON.
 
-Create a personalized lesson for "${subject}".
+Topic: ${subject}
+Learner level: ${learner.learnerLevel}
+Mood: ${learner.mood}
+Explanation style: ${learner.preferredStyle}
+Language: ${learner.language || "English"}
+Learner interests: ${learner.interest || "not specified"}
+Previous weak areas: ${weakTopics.join(", ") || "none yet"}
+Learner name: ${learner.learnerName || "not provided"}
+Generation mode: ${learner.generationMode || "lesson"}
+Regeneration seed: ${learner.regenerationSeed || "none"}
 
-Learner profile:
-- level: ${learner.learnerLevel}
-- mood: ${learner.mood}
-- preferred style: ${learner.preferredStyle}
-- interest: ${learner.interest || "general"}
-- language: ${learner.language || "English"}
-- learner name: ${learner.learnerName || "not provided"}
-- generation mode: ${learner.generationMode || "lesson"}
-- performance signals:
+Live learner signals:
 ${formatPerformanceSignals(learner.performanceSignals)}
-- regeneration seed: ${learner.regenerationSeed || "none"}
-- prior learning context:
+
+Prior learning context:
 ${formatHistoryContext(learner.historyContext)}
+
+Teach in this exact understanding structure somewhere across the explanation and stage decks:
+1. HOOK — one sentence connecting the topic to something the learner cares about
+2. CORE IDEA — the single most important thing to understand
+3. HOW IT WORKS — the mechanism, process, or logic
+4. REAL EXAMPLE — a concrete, specific, relatable example
+5. SUMMARY — one sentence the learner could repeat to explain it to a friend
+6. CHECK — one question that tests whether the learner understood
+
+Style rules:
+- If style is "analogy": build the explanation around one strong central analogy.
+- If style is "step-by-step": use ordered progression and stepwise teaching.
+- If style is "real-life": ground every point in everyday or practical experience.
+- If style is "technical": be precise without becoming cold or generic.
 
 Lesson rules:
 - Teach in the learner's chosen language.
-- Use the learner's interest only inside the child/elementary explanation and child-friendly examples. Do not weave it into intermediate or advanced explanations.
-- Sound like a patient teacher, not a chatbot.
 - Use every learner detail you were given to customize the answer.
-- If a learner name is provided, address the learner naturally by name in the main level explanations and learningModes fields. Use the name lightly and helpfully, not in every sentence.
+- Use the learner's interest only inside the child/elementary explanation and child-friendly examples. Do not weave it into intermediate or advanced explanations.
 - The lesson must feel genuinely different across child, beginner, and expert. Do not just rewrite the first paragraph and keep the rest the same.
 - Include foundation, core idea, how it works, real-world example, and summary.
 - When relevant, include origin, history, inventor/founder, timeline, evolution, and why the topic became important.
 - Give as much detail as it requires to explain the topic completely, not just define it.
-- Make the explanation rich enough to genuinely teach the topic completely, not just define it.
 - Make each top-level explanation a long-form teaching narrative, not a short intro. Target roughly 220-420 words per level explanation.
 - Create a complete five-stage lesson deck for child, beginner, and expert separately. Every stage body should be tailored to that level and roughly 110-220 words.
 - The full lesson body must change with the selected level, including the slide content, not just the headline explanation.
@@ -533,6 +569,7 @@ Lesson rules:
 - If performance signals show hesitation, wrong answers, or missing concepts, explicitly target those weak areas in the explanation, hints, flashcards, and adaptive tips.
 - If prior learning context exists, connect this lesson to the learner's weak topics, past mistakes, and repeated hesitation patterns where relevant.
 - If generation mode asks for fresh quiz questions or flashcards, make them new and not reworded duplicates.
+- Do NOT generalize. Do NOT use the topic as a placeholder. Teach it specifically.
 - Silently self-review before answering. If any section is generic, shallow, repetitive across levels, or fails to use the learner data, rewrite it before returning.
 - ${generationModeNotes[learner.generationMode] || generationModeNotes.lesson}
 
@@ -540,6 +577,7 @@ Return JSON with this exact shape:
 ${getLessonJsonShape()}
 `.trim();
 }
+
 
 function buildLessonRefinementPrompt({ topic, customTopic, learner, draftLesson }) {
   const subject = topic?.title || customTopic;

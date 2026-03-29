@@ -5,7 +5,7 @@ import { DEFAULT_UI_COPY } from "../shared/localization.js";
 
 const DEFAULT_TOPICS = LOCAL_TOPIC_LIBRARY;
 const BUILT_IN_TOPIC_COUNT = DEFAULT_TOPICS.length;
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+const API_BASE_URL = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "http://localhost:3001").replace(/\/$/, "");
 
 const LEVELS = [
   { id: "child", label: "Elementary", sublabel: "Ages 6-10", accent: "var(--sun)", description: "Simple language, vivid analogies" },

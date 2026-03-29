@@ -215,9 +215,14 @@ export async function getUserLearningContext(uid) {
     return null;
   }
 
-  const { data: events } = await client.from("learning_events").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(40);
+  const [{ data: events }, weakTopicResponse] = await Promise.all([
+    client.from("learning_events").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(40),
+    client.from("weak_topics").select("concept, created_at").eq("user_id", uid).order("created_at", { ascending: false }).limit(5),
+  ]);
   const recentEvents = events || [];
-  const weakTopics = buildWeakTopics(recentEvents).slice(0, 5);
+  const derivedWeakTopics = buildWeakTopics(recentEvents).slice(0, 5);
+  const storedWeakTopics = (weakTopicResponse?.data || []).map((row) => ({ topic: row.concept, slowCount: 0, wrongCount: 0, teachBackMisses: 0 }));
+  const weakTopics = (storedWeakTopics.length ? storedWeakTopics : derivedWeakTopics).slice(0, 5);
 
   return {
     weakTopics,
