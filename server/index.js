@@ -510,16 +510,10 @@ function getAiProvider() {
 }
 
 async function generateLessonWithGroq({ topic, customTopic, learner }) {
-  let lesson = normalizeLesson(await requestGroqLessonJson(buildLessonPrompt({ topic, customTopic, learner })), { topic, customTopic, learner });
-
-  for (let attempt = 0; attempt < 2 && !isLessonRichEnough(lesson); attempt += 1) {
-    lesson = normalizeLesson(
-      await requestGroqLessonJson(buildLessonRefinementPrompt({ topic, customTopic, learner, draftLesson: lesson })),
-      { topic, customTopic, learner }
-    );
-  }
-
-  return lesson;
+  return normalizeLesson(
+    await requestGroqLessonJson(buildLessonPrompt({ topic, customTopic, learner })),
+    { topic, customTopic, learner }
+  );
 }
 
 function buildLessonPrompt({ topic, customTopic, learner }) {
@@ -553,12 +547,12 @@ Prior learning context:
 ${formatHistoryContext(learner.historyContext)}
 
 Teach in this exact understanding structure somewhere across the explanation and stage decks:
-1. HOOK — one sentence connecting the topic to something the learner cares about
-2. CORE IDEA — the single most important thing to understand
-3. HOW IT WORKS — the mechanism, process, or logic
-4. REAL EXAMPLE — a concrete, specific, relatable example
-5. SUMMARY — one sentence the learner could repeat to explain it to a friend
-6. CHECK — one question that tests whether the learner understood
+1. HOOK Ã¢â‚¬â€ one sentence connecting the topic to something the learner cares about
+2. CORE IDEA Ã¢â‚¬â€ the single most important thing to understand
+3. HOW IT WORKS Ã¢â‚¬â€ the mechanism, process, or logic
+4. REAL EXAMPLE Ã¢â‚¬â€ a concrete, specific, relatable example
+5. SUMMARY Ã¢â‚¬â€ one sentence the learner could repeat to explain it to a friend
+6. CHECK Ã¢â‚¬â€ one question that tests whether the learner understood
 
 Style rules:
 - If style is "analogy": build the explanation around one strong central analogy.
@@ -854,16 +848,10 @@ async function requestGroqLessonJson(prompt) {
 }
 
 async function generateLessonWithGemini({ topic, customTopic, learner }) {
-  let lesson = normalizeLesson(await requestGeminiLessonJson(buildLessonPrompt({ topic, customTopic, learner })), { topic, customTopic, learner });
-
-  for (let attempt = 0; attempt < 2 && !isLessonRichEnough(lesson); attempt += 1) {
-    lesson = normalizeLesson(
-      await requestGeminiLessonJson(buildLessonRefinementPrompt({ topic, customTopic, learner, draftLesson: lesson })),
-      { topic, customTopic, learner }
-    );
-  }
-
-  return lesson;
+  return normalizeLesson(
+    await requestGeminiLessonJson(buildLessonPrompt({ topic, customTopic, learner })),
+    { topic, customTopic, learner }
+  );
 }
 
 async function requestGeminiLessonJson(prompt) {
@@ -1650,7 +1638,6 @@ function buildAuthUser(decodedToken) {
     name: decodedToken.name || decodedToken.email || null,
   };
 }
-
 
 
 
