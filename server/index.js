@@ -130,6 +130,22 @@ app.post("/api/hesitation", async (req, res) => {
 
   return res.json({ ok: true });
 });
+app.post("/api/explain-direct", async (req, res) => {
+  const { concept = "", level = "beginner", interest = "" } = req.body || {};
+  const subject = String(concept || "").trim();
+  if (!subject) {
+    return res.status(400).json({ error: "Concept is required." });
+  }
+
+  try {
+    const explanation = await generateDirectExplanation({ concept: subject, level, interest });
+    return res.json({ explanation });
+  } catch (error) {
+    console.error("Direct explanation failed:", error);
+    return res.status(500).json({ error: "Unable to generate explanation right now." });
+  }
+});
+
 app.post("/api/explain", async (req, res) => {
   const {
     topicSlug,
@@ -537,12 +553,12 @@ Prior learning context:
 ${formatHistoryContext(learner.historyContext)}
 
 Teach in this exact understanding structure somewhere across the explanation and stage decks:
-1. HOOK — one sentence connecting the topic to something the learner cares about
-2. CORE IDEA — the single most important thing to understand
-3. HOW IT WORKS — the mechanism, process, or logic
-4. REAL EXAMPLE — a concrete, specific, relatable example
-5. SUMMARY — one sentence the learner could repeat to explain it to a friend
-6. CHECK — one question that tests whether the learner understood
+1. HOOK â€” one sentence connecting the topic to something the learner cares about
+2. CORE IDEA â€” the single most important thing to understand
+3. HOW IT WORKS â€” the mechanism, process, or logic
+4. REAL EXAMPLE â€” a concrete, specific, relatable example
+5. SUMMARY â€” one sentence the learner could repeat to explain it to a friend
+6. CHECK â€” one question that tests whether the learner understood
 
 Style rules:
 - If style is "analogy": build the explanation around one strong central analogy.
@@ -728,6 +744,76 @@ function formatHistoryContext(historyContext = {}) {
     `  * missed concepts: ${(historyContext?.missedConcepts || []).join(" | ") || "none"}`,
     `  * last confusion area: ${historyContext?.lastConfusionArea || "none"}`,
   ].join("\n");
+}
+
+async function generateDirectExplanation({ concept, level, interest }) {
+  const systemPrompts = {
+    child: `You explain concepts to curious 7-year-olds. Use only simple everyday words, one imaginative analogy, warm encouraging tone. Under 160 words.`,
+    beginner: `You explain concepts to adult beginners. Define every technical term, use real-world analogies, logical step-by-step flow. Under 200 words.`,
+    expert: `You explain concepts to domain experts. Use precise technical terminology, mechanistic depth, edge cases and limitations. Under 260 words.`,
+  };
+
+  const userPrompt = `Concept: ${concept}\nInterest hook: ${interest || "not specified"}\nUse an analogy from ${interest || "everyday life"} only when it helps clarify the concept. Teach the concept specifically, not generically.`;
+
+  if (groqApiKey) {
+    return requestGroqText(systemPrompts[level] || systemPrompts.beginner, userPrompt);
+  }
+
+  if (geminiApiKey) {
+    return requestGeminiText(`${systemPrompts[level] || systemPrompts.beginner}\n\n${userPrompt}`);
+  }
+
+  return `${concept} is best understood by starting with what it is, why it matters, how it works, and one concrete example.`;
+}
+
+async function requestGroqText(systemPrompt, userPrompt) {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${groqApiKey}`,
+    },
+    body: JSON.stringify({
+      model: groqModel,
+      temperature: 0.6,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Groq direct explanation error ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data?.choices?.[0]?.message?.content?.trim() || "";
+}
+
+async function requestGeminiText(prompt) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.6,
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini direct explanation error ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
 }
 
 async function requestGroqLessonJson(prompt) {
@@ -1564,6 +1650,7 @@ function buildAuthUser(decodedToken) {
     name: decodedToken.name || decodedToken.email || null,
   };
 }
+
 
 
 
