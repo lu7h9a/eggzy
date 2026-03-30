@@ -14,7 +14,7 @@ const LEVELS = [
 ];
 
 const MOODS = ["focused", "curious", "overwhelmed", "tired"];
-const STYLES = ["analogy", "story", "technical", "simple"];
+const STYLES = ["analogy", "narrative", "story", "technical", "simple"];
 const FLASHCARD_OPTIONS = [5, 8, 10, 12];
 const QUIZ_OPTIONS = [4, 6, 8, 10];
 
@@ -1373,6 +1373,7 @@ function getMoodTone(mood) {
 function getStyleLens(style) {
   const stylesMap = {
     analogy: { coreFraming: "Here is the big idea through a mental picture.", exampleLead: "Picture it like this in daily life.", beginnerLead: "Using an analogy-first explanation:", studyAdvice: "If you get stuck, map each analogy part to the real concept." },
+    narrative: { coreFraming: "Treat the concept like a flowing journey with a clear beginning, turning point, and outcome.", exampleLead: "Now tell it as a connected narrative someone can follow from start to finish.", beginnerLead: "Using a narrative explanation:", studyAdvice: "Retell the idea as a sequence with a setup, a process, and a payoff." },
     story: { coreFraming: "Think of the concept as a sequence with characters and roles.", exampleLead: "Now place it inside a short story-like situation.", beginnerLead: "Using a story-driven explanation:", studyAdvice: "Retell the process as a short story with cause and effect." },
     technical: { coreFraming: "We will define the system precisely before simplifying it.", exampleLead: "Now anchor the abstraction in a practical use case.", beginnerLead: "Using a structure-first explanation:", studyAdvice: "List the components, then note what each one does." },
     simple: { coreFraming: "Strip away extra detail and keep only the essential idea.", exampleLead: "Use one practical example to lock it in.", beginnerLead: "Using the simplest clear explanation:", studyAdvice: "Turn each stage into one short sentence in your own words." },
@@ -1476,6 +1477,9 @@ const styles = `
 @media (max-width:720px){.page-frame{width:min(100% - 20px,1240px)}.topbar,.topbar-actions,.brand-wrap-polished{flex-direction:column;align-items:flex-start}.brand-title{font-size:28px}.hero-copy h1{font-size:42px}.cta-button{width:100%}.input-shell{flex-direction:column}.flashcard-face{font-size:22px}.streak-badge{margin-top:6px}}
 @media (max-width:600px){.level-grid{grid-template-columns:1fr !important}.tabs-row{flex-direction:column !important;gap:0 !important}.content-card{padding:20px !important}.hero-copy h1,h1{font-size:36px !important}.compare-grid,.saved-chip-row{grid-template-columns:1fr}.saved-chip-row{display:grid}.snapshot-card{min-width:0}}
 `;
+
+
+
 
 
 

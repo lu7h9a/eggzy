@@ -1,19 +1,19 @@
-﻿export const LANGUAGE_OPTIONS = [
+export const LANGUAGE_OPTIONS = [
   { code: "en", name: "English", nativeName: "English" },
-  { code: "hi", name: "Hindi", nativeName: "हिन्दी" },
-  { code: "es", name: "Spanish", nativeName: "Español" },
-  { code: "fr", name: "French", nativeName: "Français" },
+  { code: "hi", name: "Hindi", nativeName: "??????" },
+  { code: "es", name: "Spanish", nativeName: "Espa�ol" },
+  { code: "fr", name: "French", nativeName: "Fran�ais" },
   { code: "de", name: "German", nativeName: "Deutsch" },
-  { code: "pt", name: "Portuguese", nativeName: "Português" },
-  { code: "ru", name: "Russian", nativeName: "Русский" },
-  { code: "ar", name: "Arabic", nativeName: "العربية" },
-  { code: "bn", name: "Bengali", nativeName: "বাংলা" },
-  { code: "ur", name: "Urdu", nativeName: "اردو" },
-  { code: "ja", name: "Japanese", nativeName: "日本語" },
-  { code: "ko", name: "Korean", nativeName: "한국어" },
-  { code: "zh", name: "Chinese", nativeName: "中文" },
-  { code: "tr", name: "Turkish", nativeName: "Türkçe" },
-  { code: "ta", name: "Tamil", nativeName: "தமிழ்" }
+  { code: "pt", name: "Portuguese", nativeName: "Portugu�s" },
+  { code: "ru", name: "Russian", nativeName: "???????" },
+  { code: "ar", name: "Arabic", nativeName: "???????" },
+  { code: "bn", name: "Bengali", nativeName: "?????" },
+  { code: "ur", name: "Urdu", nativeName: "????" },
+  { code: "ja", name: "Japanese", nativeName: "???" },
+  { code: "ko", name: "Korean", nativeName: "???" },
+  { code: "zh", name: "Chinese", nativeName: "??" },
+  { code: "tr", name: "Turkish", nativeName: "T�rk�e" },
+  { code: "ta", name: "Tamil", nativeName: "?????" }
 ];
 
 export const DEFAULT_UI_COPY = {
@@ -137,3 +137,4 @@ export const DEFAULT_UI_COPY = {
     simple: "Simple"
   }
 };
+
